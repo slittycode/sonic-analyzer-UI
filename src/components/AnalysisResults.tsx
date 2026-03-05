@@ -101,14 +101,8 @@ export function AnalysisResults({ phase1, phase2 }: AnalysisResultsProps) {
     downloadFile(markdown, 'track-analysis.md', 'text/markdown');
   };
 
-  let finalBpm = phase1.bpm;
-  let hasBpmCorrection = false;
-  if (phase2 && phase2.bpmCorrection !== undefined && phase2.bpmCorrection !== null && phase2.bpmCorrection !== 0 && phase2.bpmCorrection !== phase1.bpm) {
-    finalBpm = phase2.bpmCorrection;
-    hasBpmCorrection = true;
-  }
-
-  let finalKey = phase1.key;
+  const finalBpm = Math.round(phase1.bpm);
+  const finalKey = phase1.key;
 
   return (
     <motion.div 
@@ -161,7 +155,6 @@ export function AnalysisResults({ phase1, phase2 }: AnalysisResultsProps) {
               </p>
               <span className="text-xs font-mono text-text-secondary">BPM</span>
             </div>
-            {hasBpmCorrection && <span className="text-[10px] font-mono text-green-500 mt-1 uppercase tracking-wider">[CORRECTED]</span>}
             
             <div className="w-full bg-bg-app h-1 mt-3 overflow-hidden border border-border/30">
               <motion.div 
@@ -170,7 +163,7 @@ export function AnalysisResults({ phase1, phase2 }: AnalysisResultsProps) {
                 className="h-full bg-accent shadow-[0_0_5px_#ff9500]"
               />
             </div>
-            <p className="text-[10px] font-mono text-text-secondary mt-1 opacity-70">CONF: {(phase1.bpmConfidence * 100).toFixed(0)}%</p>
+            <p className="text-[10px] font-mono text-text-secondary mt-1 opacity-70">CONF: {Math.min(Math.round(phase1.bpmConfidence * 100), 100) + "%"}</p>
           </div>
         </div>
         
@@ -483,5 +476,3 @@ export function AnalysisResults({ phase1, phase2 }: AnalysisResultsProps) {
     </motion.div>
   );
 }
-
-

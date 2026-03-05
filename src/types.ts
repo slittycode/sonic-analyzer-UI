@@ -19,6 +19,26 @@ export interface Phase1Result {
   };
 }
 
+export type RecommendationCategory =
+  | "Dynamics"
+  | "EQ"
+  | "Saturation"
+  | "Space"
+  | "Modulation"
+  | "Utility"
+  | "Synth"
+  | "Sampler"
+  | "Other";
+
+export interface AbletonRecommendation {
+  device: string;
+  category: RecommendationCategory;
+  parameter: string;
+  value: string;
+  reason: string;
+  advancedTip?: string;
+}
+
 export interface Phase2Result {
   trackCharacter: string;
   detectedCharacteristics: {
@@ -26,17 +46,37 @@ export interface Phase2Result {
     confidence: "HIGH" | "MED" | "LOW";
     explanation: string;
   }[];
-  arrangementOverview: string;
+  arrangementOverview?: {
+    summary: string;
+    segments: Array<{
+      index: number;
+      startTime: number;
+      endTime: number;
+      lufs?: number;
+      description: string;
+      spectralNote?: string;
+    }>;
+    noveltyNotes?: string;
+  };
   sonicElements: {
     kick: string;
     bass: string;
     melodicArp: string;
     grooveAndTiming: string;
     effectsAndTexture: string;
+    widthAndStereo?: string;
+    harmonicContent?: string;
   };
-  mixAndMasterChain: string;
+  mixAndMasterChain?: Array<{
+    order: number;
+    device: string;
+    parameter: string;
+    value: string;
+    reason: string;
+  }>;
   secretSauce: {
     title: string;
+    icon?: string;
     explanation: string;
     implementationSteps: string[];
   };
@@ -45,14 +85,18 @@ export interface Phase2Result {
     value: string;
     reason: string;
   }[];
-  abletonRecommendations?: {
-    device: string;
-    category: "Dynamics" | "EQ" | "Saturation" | "Space" | "Modulation" | "Utility" | "Synth" | "Sampler" | "Other";
-    parameter: string;
-    value: string;
-    reason: string;
-    advancedTip?: string;
-  }[];
+  abletonRecommendations?: AbletonRecommendation[];
+}
+
+export interface BackendDiagnostics {
+  backendDurationMs: number;
+  engineVersion: string;
+}
+
+export interface BackendAnalyzeResponse {
+  requestId: string;
+  phase1: Phase1Result;
+  diagnostics?: BackendDiagnostics;
 }
 
 export interface DiagnosticLogEntry {
@@ -67,4 +111,6 @@ export interface DiagnosticLogEntry {
     type: string;
   };
   timestamp: string;
+  requestId?: string;
+  source?: "backend" | "gemini" | "system";
 }

@@ -4,9 +4,9 @@ import { AnalysisResults } from './components/AnalysisResults';
 import { DiagnosticLog } from './components/DiagnosticLog';
 import { WaveformPlayer } from './components/WaveformPlayer';
 import { EQSpinner } from './components/EQSpinner';
-import { analyzeAudio } from './services/analyzer';
+import { analyzeAudio, isPhase2GeminiEnabled } from './services/analyzer';
 import { Phase1Result, Phase2Result, DiagnosticLogEntry } from './types';
-import { AudioWaveform, PlayCircle, Sparkles, Settings, Power, Activity } from 'lucide-react';
+import { AudioWaveform, Sparkles, Activity } from 'lucide-react';
 
 const MODELS = [
   { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro Preview (Recommended)' },
@@ -22,6 +22,7 @@ export default function App() {
   const [currentPhase, setCurrentPhase] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState(MODELS[0].id);
+  const phase2Enabled = isPhase2GeminiEnabled();
   
   const [phase1Result, setPhase1Result] = useState<Phase1Result | null>(null);
   const [phase2Result, setPhase2Result] = useState<Phase2Result | null>(null);
@@ -49,6 +50,7 @@ export default function App() {
   };
 
   const handleFileSelect = (file: File) => {
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
     setAudioFile(file);
     setAudioUrl(URL.createObjectURL(file));
     // Reset previous analysis
@@ -131,7 +133,7 @@ export default function App() {
               <select
                 value={selectedModel}
                 onChange={(e) => setSelectedModel(e.target.value)}
-                disabled={isAnalyzing}
+                disabled={isAnalyzing || !phase2Enabled}
                 className="appearance-none bg-bg-card border border-border text-text-primary text-[10px] font-mono py-1 pl-2 pr-6 rounded-sm focus:outline-none focus:border-accent cursor-pointer disabled:opacity-50"
               >
                 {MODELS.map((model) => (
@@ -141,6 +143,9 @@ export default function App() {
                 ))}
               </select>
             </div>
+            {!phase2Enabled && (
+              <span className="text-[10px] font-mono text-text-secondary uppercase">PHASE 2 OFF</span>
+            )}
             <div className="h-4 w-px bg-border"></div>
             <div className="flex items-center space-x-1">
               <span className="text-[10px] font-mono text-text-secondary uppercase">CPU</span>
