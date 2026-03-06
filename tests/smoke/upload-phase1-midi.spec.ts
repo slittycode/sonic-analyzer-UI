@@ -4,7 +4,72 @@ import { fileURLToPath } from 'node:url';
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 
-test('phase1 melody detail renders session musician panel', async ({ page }) => {
+async function stubGeminiPhase2(page: import('@playwright/test').Page) {
+  await page.route('**://generativelanguage.googleapis.com/**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        candidates: [
+          {
+            content: {
+              role: 'model',
+              parts: [
+                {
+                  text: JSON.stringify({
+                    trackCharacter: 'Deterministic smoke response.',
+                    detectedCharacteristics: [
+                      { name: 'Stereo Discipline', confidence: 'HIGH', explanation: 'Controlled width.' },
+                    ],
+                    arrangementOverview: {
+                      summary: 'Smoke summary.',
+                      segments: [{ index: 1, startTime: 0, endTime: 20, description: 'Intro segment' }],
+                    },
+                    sonicElements: {
+                      kick: 'Kick.',
+                      bass: 'Bass.',
+                      melodicArp: 'Arp.',
+                      grooveAndTiming: 'Groove.',
+                      effectsAndTexture: 'FX.',
+                    },
+                    mixAndMasterChain: [
+                      { order: 1, device: 'Drum Buss', parameter: 'Drive', value: '5 dB', reason: 'Punch.' },
+                      { order: 2, device: 'EQ Eight', parameter: 'Low Cut', value: '30 Hz', reason: 'Cleanup.' },
+                      { order: 3, device: 'Operator', parameter: 'Detune', value: '0.08', reason: 'Melodic body.' },
+                      { order: 4, device: 'Saturator', parameter: 'Drive', value: '2.5 dB', reason: 'Mid body.' },
+                      { order: 5, device: 'Utility', parameter: 'Width', value: '125%', reason: 'Stereo control.' },
+                      { order: 6, device: 'Auto Filter', parameter: 'High Shelf', value: '+2 dB', reason: 'Air.' },
+                      { order: 7, device: 'Glue Compressor', parameter: 'Threshold', value: '-4 dB', reason: 'Glue.' },
+                      { order: 8, device: 'Limiter', parameter: 'Ceiling', value: '-0.3 dB', reason: 'Mastering.' },
+                    ],
+                    secretSauce: {
+                      title: 'Smoke Sauce',
+                      explanation: 'Smoke explanation.',
+                      implementationSteps: ['Step 1'],
+                    },
+                    confidenceNotes: [{ field: 'Key Signature', value: 'HIGH', reason: 'Stable.' }],
+                    abletonRecommendations: [
+                      {
+                        device: 'Operator',
+                        category: 'SYNTHESIS',
+                        parameter: 'Coarse',
+                        value: '1.00',
+                        reason: 'Matches tonal center.',
+                      },
+                    ],
+                  }),
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    });
+  });
+}
+
+test('phase1 dual-source session musician panel toggles between polyphonic and monophonic views', async ({ page }) => {
+  await stubGeminiPhase2(page);
   await page.route('**/api/analyze', async (route) => {
     await route.fulfill({
       status: 200,
@@ -29,6 +94,41 @@ test('phase1 melody detail renders session musician panel', async ({ page }) => 
             upperMids: 0.4,
             highs: 1.0,
             brilliance: 0.8,
+          },
+          transcriptionDetail: {
+            transcriptionMethod: 'basic-pitch',
+            noteCount: 2,
+            averageConfidence: 0.83,
+            stemSeparationUsed: true,
+            stemsTranscribed: ['bass', 'other'],
+            dominantPitches: [
+              { pitchMidi: 48, pitchName: 'C3', count: 4 },
+              { pitchMidi: 55, pitchName: 'G3', count: 3 },
+            ],
+            pitchRange: {
+              minMidi: 48,
+              maxMidi: 67,
+              minName: 'C3',
+              maxName: 'G4',
+            },
+            notes: [
+              {
+                pitchMidi: 48,
+                pitchName: 'C3',
+                onsetSeconds: 0.1,
+                durationSeconds: 0.4,
+                confidence: 0.92,
+                stemSource: 'bass',
+              },
+              {
+                pitchMidi: 67,
+                pitchName: 'G4',
+                onsetSeconds: 0.5,
+                durationSeconds: 0.2,
+                confidence: 0.74,
+                stemSource: 'other',
+              },
+            ],
           },
           melodyDetail: {
             noteCount: 3,
@@ -66,12 +166,24 @@ test('phase1 melody detail renders session musician panel', async ({ page }) => 
   await expect(page.getByText('Analysis Results')).toBeVisible();
   await expect(panel.getByRole('heading', { name: /SESSION MUSICIAN/i }).first()).toBeVisible();
   await expect(panel.getByText('Audio to MIDI transcription')).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'POLYPHONIC' })).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'MONOPHONIC' })).toBeVisible();
+  await expect(panel.getByText('SOURCES: BASIC PITCH').first()).toBeVisible();
+  await expect(panel.getByText('Polyphonic transcription via Basic Pitch')).toBeVisible();
   await expect(panel.getByRole('button', { name: /Download \.mid/i })).toBeVisible();
   const swingSlider = panel.locator('input[type="range"]');
   await expect(swingSlider).toBeDisabled();
 
   await panel.getByRole('button', { name: '1/16 note' }).click();
   await expect(swingSlider).toBeEnabled();
+
+  await panel.getByRole('button', { name: 'MONOPHONIC' }).click();
+  await expect(panel.getByText('SOURCES: ESSENTIA').first()).toBeVisible();
+  await expect(panel.getByText('Monophonic pitch detection via Essentia')).toBeVisible();
+
+  await panel.getByRole('button', { name: 'POLYPHONIC' }).click();
+  await expect(panel.getByText('SOURCES: BASIC PITCH').first()).toBeVisible();
+  await expect(panel.getByText('Polyphonic transcription via Basic Pitch')).toBeVisible();
 
   await panel.getByRole('button', { name: /Collapse session musician panel/i }).click();
   await expect(panel.getByRole('button', { name: '1/16 note' })).toHaveCount(0);
@@ -81,6 +193,7 @@ test('phase1 melody detail renders session musician panel', async ({ page }) => 
 });
 
 test('missing melodyDetail shows MIDI unavailable state', async ({ page }) => {
+  await stubGeminiPhase2(page);
   await page.route('**/api/analyze', async (route) => {
     await route.fulfill({
       status: 200,
@@ -123,7 +236,7 @@ test('missing melodyDetail shows MIDI unavailable state', async ({ page }) => {
   const panel = page.locator('section').filter({ hasText: /SESSION MUSICIAN/i }).first();
   await expect(panel.locator('p').filter({ hasText: 'MIDI TRANSCRIPTION UNAVAILABLE' })).toBeVisible();
   await expect(
-    panel.getByText('Re-run analysis with FLAC source for melody extraction, or paste DSP JSON with melodyDetail field populated'),
+    panel.getByText('Run with --transcribe flag for Basic Pitch polyphonic transcription, or ensure melodyDetail is present in DSP JSON'),
   ).toBeVisible();
   await expect(panel.getByRole('button', { name: /Preview/i })).toBeDisabled();
   await expect(panel.getByRole('button', { name: /Download \.mid/i })).toBeDisabled();

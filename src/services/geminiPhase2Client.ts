@@ -91,6 +91,7 @@ ABSOLUTE RULES:
 7. When transcriptionDetail is present, use dominantPitches for note name recommendations, not melodyDetail.dominantNotes.
 8. stemSeparationUsed: true means bass and melodic content have been transcribed independently - treat bass stem notes and other stem notes as separate layers.
 9. You are a producer reading a spec sheet, not an audio analyser.
+10. mixAndMasterChain must contain a minimum of 8 device objects. If fewer than 8 real devices can be inferred from the audio, supplement with contextually appropriate Ableton Live devices that would suit the detected characteristics. Never return fewer than 8.
 
 FIELD GLOSSARY:
 - bpm: use exactly as Ableton project tempo
@@ -199,6 +200,19 @@ Each must be at minimum 4 sentences with specific values referenced:
 
 mixAndMasterChain:
 Return an array of device objects in signal flow order.
+Return a minimum of 8 devices covering the full signal chain from sound design through to the master bus.
+Cover all three frequency ranges with at least one device per range:
+- Low end: sub bass, kick, or bass processing
+- Mid range: main body, saturation, compression, or harmonic shaping
+- High end: air, presence, transient detail, or top-end polish
+Where applicable to the track, the chain must explicitly cover:
+- transient shaping or drum processing
+- bass/sub management
+- mid-range saturation or harmonic excitation
+- stereo width control
+- high-frequency air or presence
+- bus compression or glue
+- limiting/mastering
 Each object must include:
 - order: position in chain starting at 1
 - device: exact Ableton Live 12 device name
@@ -207,8 +221,7 @@ Each object must include:
   derived from JSON measurements
 - reason: one sentence referencing the specific measured 
   value that justifies this device and setting
-Minimum 5 devices. Cover: dynamics, EQ, stereo, 
-saturation, limiting in that order.
+Never return fewer than 8 devices.
 
 secretSauce:
 Title: a specific named technique, not generic.

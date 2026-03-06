@@ -780,6 +780,22 @@ function mergeDisplayGroups(left: MixChainGroupViewModel, right: MixChainGroupVi
   };
 }
 
+function isProtectedMixGroup(name: string): boolean {
+  return (
+    name.includes("DRUM")
+    || name.includes("BASS")
+    || name.includes("HIGH-END")
+    || name.includes("MASTER BUS")
+  );
+}
+
+function canMergeMixGroups(left: MixChainGroupViewModel, right: MixChainGroupViewModel | undefined): right is MixChainGroupViewModel {
+  if (!right) return false;
+  if (left.cards.length !== 1 || right.cards.length !== 1) return false;
+  if (isProtectedMixGroup(left.name) || isProtectedMixGroup(right.name)) return false;
+  return true;
+}
+
 function compactMixChainGroups(groups: MixChainGroupViewModel[]): MixChainGroupViewModel[] {
   if (groups.length <= 1) return groups;
 
@@ -790,7 +806,9 @@ function compactMixChainGroups(groups: MixChainGroupViewModel[]): MixChainGroupV
     const current = groups[index];
     if (!current) break;
 
-    if (current.cards.length !== 1) {
+    const next = groups[index + 1];
+
+    if (!canMergeMixGroups(current, next)) {
       compacted.push({
         name: current.name,
         cards: [...current.cards],
@@ -800,35 +818,8 @@ function compactMixChainGroups(groups: MixChainGroupViewModel[]): MixChainGroupV
       continue;
     }
 
-    const next = groups[index + 1];
-    if (next && next.cards.length === 1) {
-      compacted.push(mergeDisplayGroups(current, next));
-      index += 2;
-      continue;
-    }
-
-    if (compacted.length > 0) {
-      const previous = compacted[compacted.length - 1];
-      if (previous) {
-        previous.cards = [...previous.cards, ...current.cards];
-        previous.annotation = mergeGroupAnnotations(previous.annotation, current.annotation);
-      }
-      index += 1;
-      continue;
-    }
-
-    if (next) {
-      compacted.push(mergeDisplayGroups(current, next));
-      index += 2;
-      continue;
-    }
-
-    compacted.push({
-      name: current.name,
-      cards: [...current.cards],
-      annotation: current.annotation,
-    });
-    index += 1;
+    compacted.push(mergeDisplayGroups(current, next));
+    index += 2;
   }
 
   return compacted;

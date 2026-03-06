@@ -126,8 +126,10 @@ describe('AnalysisResults UI wiring', () => {
     );
 
     expect((html.match(/class=\"grid gap-4 grid-cols-2\"/g) ?? []).length).toBeGreaterThanOrEqual(2);
-    expect(html).toContain('DRUM PROCESSING / BASS PROCESSING');
-    expect(html).toContain('HIGH-END DETAIL / MASTER BUS');
+    expect(html).toContain('🥁 DRUM PROCESSING');
+    expect(html).toContain('🫧 BASS PROCESSING');
+    expect(html).toContain('✨ HIGH-END DETAIL');
+    expect(html).toContain('🧱 MASTER BUS');
     expect(html).not.toContain('class="flex flex-wrap gap-4"');
     expect(html).not.toContain('data-testid="mix-group-grid-');
     expect(html).not.toContain('data-testid="patch-grid"');
@@ -192,7 +194,7 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).toContain('Run with --transcribe flag for Basic Pitch polyphonic transcription, or ensure melodyDetail is present in DSP JSON');
   });
 
-  it('prefers transcriptionDetail over melodyDetail in the Session Musician panel', () => {
+  it('shows the polyphonic toggle state by default when both sources are available', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
         phase1: {
@@ -251,11 +253,47 @@ describe('AnalysisResults UI wiring', () => {
       }),
     );
 
+    expect(html).toContain('POLYPHONIC');
+    expect(html).toContain('MONOPHONIC');
     expect(html).toContain('Polyphonic transcription via Basic Pitch');
     expect(html).toContain('Range: C3 - G4');
     expect(html).toContain('Confidence: 83%');
-    expect(html).toContain('Sources: bass, other');
+    expect(html).toContain('SOURCES: BASIC PITCH');
     expect(html).not.toContain('MIDI TRANSCRIPTION UNAVAILABLE');
+  });
+
+  it('shows Essentia source badges when only melodyDetail is available', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: {
+          ...basePhase1,
+          melodyDetail: {
+            noteCount: 3,
+            notes: [
+              { midi: 60, onset: 0.2, duration: 0.3 },
+              { midi: 64, onset: 0.8, duration: 0.2 },
+              { midi: 67, onset: 1.2, duration: 0.4 },
+            ],
+            dominantNotes: [60, 64, 67],
+            pitchRange: { min: 60, max: 67 },
+            pitchConfidence: 0.72,
+            midiFile: null,
+            sourceSeparated: true,
+            vibratoPresent: false,
+            vibratoExtent: 0,
+            vibratoRate: 0,
+            vibratoConfidence: 0.1,
+          },
+        },
+        phase2: basePhase2,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).not.toContain('POLYPHONIC');
+    expect(html).not.toContain('MONOPHONIC');
+    expect(html).toContain('SOURCES: ESSENTIA');
+    expect(html).toContain('Monophonic pitch detection via Essentia');
   });
 
   it('renders arrangement novelty and spectral note labels with fixed segment palette colors', () => {

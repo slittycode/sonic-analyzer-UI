@@ -132,13 +132,21 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
   const previewRef = useRef<PreviewHandle | null>(null);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [expanded, setExpanded] = useState(true);
+  const [sourceMode, setSourceMode] = useState<"polyphonic" | "monophonic">("polyphonic");
   const [quantizeOptions, setQuantizeOptions] = useState<QuantizeOptions>({ grid: 'off', swing: 0 });
   const hasTranscription = !!transcriptionDetail?.noteCount && transcriptionDetail.noteCount > 0;
   const hasMelody = !!melodyDetail?.notes?.length;
-  const activeSource = hasTranscription ? 'transcription' : hasMelody ? 'melody' : 'none';
+  const canToggle = hasTranscription && hasMelody;
+  const activeSource = canToggle
+    ? sourceMode
+    : hasTranscription
+      ? 'polyphonic'
+      : hasMelody
+        ? 'monophonic'
+        : 'none';
 
   const mappedNotes = useMemo<MidiDisplayNote[]>(() => {
-    if (activeSource === 'transcription' && transcriptionDetail?.notes?.length) {
+    if (activeSource === 'polyphonic' && transcriptionDetail?.notes?.length) {
       return transcriptionDetail.notes.map((note) => ({
         midi: note.pitchMidi,
         name: note.pitchName,
@@ -149,7 +157,7 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
       }));
     }
 
-    if (activeSource === 'melody' && melodyDetail?.notes?.length) {
+    if (activeSource === 'monophonic' && melodyDetail?.notes?.length) {
       return melodyDetail.notes.map((note) => ({
         midi: note.midi,
         name: midiToNoteName(note.midi),
@@ -219,14 +227,14 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
     const minMidi = Math.min(...midiValues);
     const maxMidi = Math.max(...midiValues);
     const avgConfidence = Math.round(
-      (activeSource === 'transcription'
+      (activeSource === 'polyphonic'
         ? transcriptionDetail?.averageConfidence ?? 0
         : melodyDetail?.pitchConfidence ?? 0) * 100,
     );
     const totalDuration = displayNotes.reduce((sum, note) => sum + note.duration, 0).toFixed(1);
 
     return {
-      count: activeSource === 'transcription' ? transcriptionDetail?.noteCount ?? displayNotes.length : displayNotes.length,
+      count: activeSource === 'polyphonic' ? transcriptionDetail?.noteCount ?? displayNotes.length : displayNotes.length,
       range: `${midiToNoteName(minMidi)} - ${midiToNoteName(maxMidi)}`,
       avgConfidence,
       totalDuration,
@@ -234,11 +242,11 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
   }, [activeSource, displayNotes, melodyDetail, transcriptionDetail]);
   const hasNotes = displayNotes.length > 0;
   const dominantNoteNames =
-    activeSource === 'transcription'
+    activeSource === 'polyphonic'
       ? transcriptionDetail?.dominantPitches.map((note) => note.pitchName) ?? []
       : melodyDetail?.dominantNotes.map((note) => midiToNoteName(note)) ?? [];
   const rangeLabel =
-    activeSource === 'transcription'
+    activeSource === 'polyphonic'
       ? transcriptionDetail?.pitchRange.minName && transcriptionDetail?.pitchRange.maxName
         ? `${transcriptionDetail.pitchRange.minName} - ${transcriptionDetail.pitchRange.maxName}`
         : 'n/a'
@@ -246,21 +254,23 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
         ? 'n/a'
         : `${midiToNoteName(melodyDetail.pitchRange.min)} - ${midiToNoteName(melodyDetail.pitchRange.max)}`;
   const confidencePercent =
-    activeSource === 'transcription'
+    activeSource === 'polyphonic'
       ? Math.round((transcriptionDetail?.averageConfidence ?? 0) * 100)
-      : activeSource === 'melody'
+      : activeSource === 'monophonic'
         ? Math.round((melodyDetail?.pitchConfidence ?? 0) * 100)
         : 0;
   const isDraft =
-    activeSource === 'transcription'
+    activeSource === 'polyphonic'
       ? (transcriptionDetail?.averageConfidence ?? 0) < 0.15
-      : activeSource === 'melody'
+      : activeSource === 'monophonic'
         ? (melodyDetail?.pitchConfidence ?? 0) < 0.15
         : false;
-  const transcriptionSourceLabel =
-    activeSource === 'transcription' && transcriptionDetail?.stemsTranscribed.length
-      ? transcriptionDetail.stemsTranscribed.join(', ')
-      : null;
+  const sourceBadgeLabel =
+    activeSource === 'polyphonic'
+      ? 'SOURCES: BASIC PITCH'
+      : activeSource === 'monophonic'
+        ? 'SOURCES: ESSENTIA'
+        : null;
 
   return (
     <section className="space-y-4">
@@ -305,9 +315,30 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
               <Download className="w-3.5 h-3.5" />
               Download .mid
             </button>
-            <span className="hidden md:inline-flex px-2 py-1 rounded border border-border text-[10px] font-mono text-text-secondary bg-bg-panel/40">
-              {activeSource === 'transcription' ? 'Polyphonic active' : activeSource === 'melody' ? 'Monophonic mode' : 'No MIDI data'}
-            </span>
+            {canToggle && (
+              <div className="inline-flex items-center rounded-sm border border-border bg-bg-panel/40 p-0.5">
+                <button
+                  onClick={() => setSourceMode('polyphonic')}
+                  className={`px-2 py-1 rounded-sm text-[10px] font-mono uppercase transition-colors ${
+                    activeSource === 'polyphonic'
+                      ? 'bg-accent text-bg-app'
+                      : 'text-text-secondary hover:text-text-primary'
+                  }`}
+                >
+                  POLYPHONIC
+                </button>
+                <button
+                  onClick={() => setSourceMode('monophonic')}
+                  className={`px-2 py-1 rounded-sm text-[10px] font-mono uppercase transition-colors ${
+                    activeSource === 'monophonic'
+                      ? 'bg-accent text-bg-app'
+                      : 'text-text-secondary hover:text-text-primary'
+                  }`}
+                >
+                  MONOPHONIC
+                </button>
+              </div>
+            )}
             <button
               onClick={() => setExpanded((prev) => !prev)}
               aria-label={expanded ? 'Collapse session musician panel' : 'Expand session musician panel'}
@@ -343,10 +374,10 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
                     <span>Confidence: {stats.avgConfidence}%</span>
                     <span className="opacity-50">|</span>
                     <span>Duration: {stats.totalDuration}s</span>
-                    {transcriptionSourceLabel && (
+                    {sourceBadgeLabel && (
                       <>
                         <span className="opacity-50">|</span>
-                        <span>Sources: {transcriptionSourceLabel}</span>
+                        <span>{sourceBadgeLabel}</span>
                       </>
                     )}
                   </div>
@@ -355,13 +386,13 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
                 <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono uppercase tracking-wide text-text-secondary">
                   {!stats && (
                     <span className="px-2 py-1 rounded border border-border bg-bg-panel/40">
-                      {activeSource === 'transcription' ? transcriptionDetail?.noteCount ?? 0 : melodyDetail?.noteCount ?? 0} notes
+                      {activeSource === 'polyphonic' ? transcriptionDetail?.noteCount ?? 0 : melodyDetail?.noteCount ?? 0} notes
                     </span>
                   )}
                   <span className="px-2 py-1 rounded border border-border bg-bg-panel/40">Range: {rangeLabel}</span>
                   <span className="px-2 py-1 rounded border border-border bg-bg-panel/40">Confidence: {confidencePercent}%</span>
-                  {transcriptionSourceLabel && (
-                    <span className="px-2 py-1 rounded border border-border bg-bg-panel/40">Sources: {transcriptionSourceLabel}</span>
+                  {sourceBadgeLabel && (
+                    <span className="px-2 py-1 rounded border border-border bg-bg-panel/40">{sourceBadgeLabel}</span>
                   )}
                   {isDraft && (
                     <span className="px-2 py-1 rounded border border-yellow-500/30 text-yellow-400 bg-yellow-500/10">
@@ -436,10 +467,10 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
             <div className="flex items-start gap-2 text-[10px] font-mono text-text-secondary/80">
               <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
               <span title="Session musician transcription details">
-                {activeSource === 'transcription'
+                {activeSource === 'polyphonic'
                   ? 'Polyphonic transcription via Basic Pitch. Adjust quantize before preview/export.'
-                  : activeSource === 'melody'
-                    ? 'Monophonic transcription from backend pitch detection. Adjust quantize before preview/export.'
+                  : activeSource === 'monophonic'
+                    ? 'Monophonic pitch detection via Essentia. Adjust quantize before preview/export.'
                     : 'MIDI transcription unavailable until transcriptionDetail or melodyDetail is present in the DSP payload.'}
                 {isDraft ? ' Confidence is low, so treat this clip as a draft scaffold.' : ''}
               </span>

@@ -118,7 +118,7 @@ describe('analysisResultsViewModel helpers', () => {
     expect(widthCard?.description.includes('Seven sentence.')).toBe(false);
   });
 
-  it('compacts singleton mix groups into multi-card display groups', () => {
+  it('keeps protected singleton mix groups visually separate', () => {
     const groups = buildMixChainGroups(
       phase1,
       [
@@ -156,22 +156,69 @@ describe('analysisResultsViewModel helpers', () => {
 
     expect(groups).toEqual([
       expect.objectContaining({
-        name: 'DRUM PROCESSING / BASS PROCESSING',
+        name: 'DRUM PROCESSING',
+        cards: [expect.objectContaining({ device: 'Drum Buss' })],
+      }),
+      expect.objectContaining({
+        name: 'BASS PROCESSING',
+        cards: [expect.objectContaining({ device: 'EQ Eight' })],
+      }),
+      expect.objectContaining({
+        name: 'HIGH-END DETAIL',
+        cards: [expect.objectContaining({ device: 'Auto Filter' })],
+      }),
+      expect.objectContaining({
+        name: 'MASTER BUS',
+        cards: [expect.objectContaining({ device: 'Limiter' })],
+      }),
+    ]);
+    expect(groups[2]?.annotation).toContain('Annotated high-end focus');
+    expect(groups.some((group) => group.name.includes('DRUM PROCESSING /'))).toBe(false);
+    expect(groups.some((group) => group.name.includes('HIGH-END DETAIL /'))).toBe(false);
+  });
+
+  it('merges only adjacent unprotected singleton groups and caps merges at two groups', () => {
+    const groups = buildMixChainGroups(
+      phase1,
+      [
+        {
+          order: 1,
+          device: 'Operator',
+          parameter: 'Detune',
+          value: '0.08',
+          reason: 'Shapes synth lead tone and melodic movement.',
+        },
+        {
+          order: 2,
+          device: 'Saturator',
+          parameter: 'Drive',
+          value: '2.5 dB',
+          reason: 'Adds mid body and clarity to the center image.',
+        },
+      ],
+      {
+        kick: 'Kick sentence.',
+        bass: 'Bass sentence.',
+        melodicArp: 'Arp sentence.',
+        grooveAndTiming: 'Groove sentence.',
+        effectsAndTexture: 'FX sentence.',
+      },
+    );
+
+    expect(groups).toEqual([
+      expect.objectContaining({
+        name: 'SYNTH / MELODIC / MID PROCESSING',
         cards: expect.arrayContaining([
-          expect.objectContaining({ device: 'Drum Buss' }),
-          expect.objectContaining({ device: 'EQ Eight' }),
+          expect.objectContaining({ device: 'Operator' }),
+          expect.objectContaining({ device: 'Saturator' }),
         ]),
       }),
       expect.objectContaining({
-        name: 'HIGH-END DETAIL / MASTER BUS',
-        cards: expect.arrayContaining([
-          expect.objectContaining({ device: 'Auto Filter' }),
-          expect.objectContaining({ device: 'Limiter' }),
-        ]),
+        name: 'MASTER BUS',
+        cards: [expect.objectContaining({ device: 'Limiter' })],
       }),
     ]);
-    expect(groups.every((group) => group.cards.length >= 2)).toBe(true);
-    expect(groups[1]?.annotation).toContain('Annotated high-end focus');
+    expect(groups.every((group) => group.name.split(' / ').length <= 3)).toBe(true);
   });
 
   it('builds expanded patch cards with at least three parameters', () => {
