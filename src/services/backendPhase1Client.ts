@@ -43,6 +43,7 @@ export class BackendClientError extends Error {
 export interface AnalyzePhase1Options {
   apiBaseUrl: string;
   timeoutMs?: number;
+  transcribe?: boolean;
 }
 
 type UnknownRecord = Record<string, unknown>;
@@ -53,7 +54,7 @@ export async function estimatePhase1WithBackend(
 ): Promise<BackendEstimateResponse> {
   const response = await postBackendMultipart(
     `${options.apiBaseUrl}/api/analyze/estimate`,
-    buildTrackFormData(file, null),
+    buildTrackFormData(file, null, false),
     options.timeoutMs ?? DEFAULT_ESTIMATE_TIMEOUT_MS,
   );
 
@@ -77,7 +78,7 @@ export async function analyzePhase1WithBackend(
 ): Promise<BackendAnalyzeResponse> {
   const response = await postBackendMultipart(
     `${options.apiBaseUrl}/api/analyze`,
-    buildTrackFormData(file, dspJsonOverride),
+    buildTrackFormData(file, dspJsonOverride, options.transcribe ?? false),
     options.timeoutMs ?? DEFAULT_BACKEND_TIMEOUT_MS,
   );
 
@@ -274,9 +275,10 @@ function tryParseBackendErrorResponse(payloadText: string): BackendErrorResponse
   }
 }
 
-function buildTrackFormData(file: File, dspJsonOverride: string | null): FormData {
+function buildTrackFormData(file: File, dspJsonOverride: string | null, transcribe = false): FormData {
   const formData = new FormData();
   formData.append("track", file);
+  formData.append("transcribe", transcribe ? "true" : "false");
   if (dspJsonOverride?.trim()) {
     formData.append("dsp_json_override", dspJsonOverride);
   }

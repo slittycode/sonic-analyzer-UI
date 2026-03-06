@@ -70,6 +70,7 @@ export default function App() {
   const [isEstimateLoading, setIsEstimateLoading] = useState(false);
   const [estimateError, setEstimateError] = useState<string | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
+  const [transcribeEnabled, setTranscribeEnabled] = useState(false);
 
   const phase1CompletedRef = useRef(false);
   const analysisStartedAtRef = useRef<number | null>(null);
@@ -87,7 +88,7 @@ export default function App() {
     setEstimateError(null);
     setIsEstimateLoading(true);
 
-    estimatePhase1WithBackend(audioFile, { apiBaseUrl: appConfig.apiBaseUrl })
+    estimatePhase1WithBackend(audioFile, { apiBaseUrl: appConfig.apiBaseUrl, transcribe: false })
       .then((result) => {
         if (isCancelled) return;
         setAnalysisEstimate(result.estimate);
@@ -298,6 +299,7 @@ export default function App() {
           analysisStartedAtRef.current = null;
           setElapsedMs(0);
         },
+        { transcribe: transcribeEnabled },
       );
     } catch (rawError) {
       const err = rawError instanceof Error ? rawError : new Error(String(rawError));
@@ -373,6 +375,41 @@ export default function App() {
                   </div>
                   <div className="bg-bg-card border border-border rounded-b-sm p-4 flex flex-col min-h-[220px]">
                     <FileUpload onFileSelect={handleFileSelect} onFileClear={handleFileClear} isLoading={isAnalyzing} />
+                    <label
+                      className={`mt-4 rounded-sm border px-3 py-3 transition-colors cursor-pointer ${
+                        transcribeEnabled
+                          ? 'border-accent bg-accent/10 text-accent'
+                          : 'border-border bg-bg-panel text-text-secondary'
+                      } ${isAnalyzing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={transcribeEnabled}
+                          onChange={(e) => setTranscribeEnabled(e.target.checked)}
+                          disabled={isAnalyzing}
+                          className="mt-0.5 h-4 w-4 accent-accent"
+                        />
+                        <div className="space-y-1">
+                          <p className="text-[10px] font-mono uppercase tracking-wider">MIDI TRANSCRIPTION</p>
+                          <p className="text-[10px] font-mono uppercase tracking-wide opacity-80">
+                            Basic Pitch polyphonic analysis (+30-60s)
+                          </p>
+                        </div>
+                      </div>
+                    </label>
+                    {!phase1Result && audioFile && (
+                      <div className="mt-4 flex justify-end">
+                        <button
+                          onClick={handleStartAnalysis}
+                          disabled={isAnalyzing}
+                          className="bg-accent hover:bg-[#ff9933] disabled:opacity-50 disabled:cursor-not-allowed text-bg-app font-bold py-2 px-6 rounded-sm flex items-center transition-colors uppercase tracking-wider font-mono text-xs"
+                        >
+                          <Sparkles className="w-3 h-3 mr-2" />
+                          Initiate Analysis
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -447,17 +484,6 @@ export default function App() {
                           </div>
                         )}
 
-                        {!phase1Result && (
-                          <div className="mt-2 flex justify-end">
-                            <button
-                              onClick={handleStartAnalysis}
-                              className="bg-accent hover:bg-[#ff9933] text-bg-app font-bold py-2 px-6 rounded-sm flex items-center transition-colors uppercase tracking-wider font-mono text-xs"
-                            >
-                              <Sparkles className="w-3 h-3 mr-2" />
-                              Initiate Analysis
-                            </button>
-                          </div>
-                        )}
                       </div>
                     )
                   ) : (

@@ -4,6 +4,10 @@ import { analyzePhase2WithGemini, canRunGeminiPhase2 } from "./geminiPhase2Clien
 import { PHASE1_LABEL, PHASE2_SKIPPED_LABEL } from "./phaseLabels";
 import { DiagnosticLogEntry, Phase1Result, Phase2Result } from "../types";
 
+interface AnalyzeAudioOptions {
+  transcribe?: boolean;
+}
+
 export function isPhase2GeminiEnabled(): boolean {
   return canRunGeminiPhase2();
 }
@@ -15,6 +19,7 @@ export async function analyzeAudio(
   onPhase1Complete: (result: Phase1Result, log: DiagnosticLogEntry) => void,
   onPhase2Complete: (result: Phase2Result | null, log: DiagnosticLogEntry) => void,
   onError: (error: Error) => void,
+  analysisOptions?: AnalyzeAudioOptions,
 ) {
   let phase1Completed = false;
   const audioMetadata: DiagnosticLogEntry["audioMetadata"] = {
@@ -27,6 +32,7 @@ export async function analyzeAudio(
     const phase1Start = Date.now();
     const backendResult = await analyzePhase1WithBackend(file, dspJson, {
       apiBaseUrl: appConfig.apiBaseUrl,
+      transcribe: analysisOptions?.transcribe ?? false,
     });
     const phase1End = Date.now();
 

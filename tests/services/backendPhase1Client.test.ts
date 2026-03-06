@@ -285,6 +285,29 @@ describe('estimatePhase1WithBackend', () => {
     expect(result.estimate.totalLowMs).toBe(22000);
     expect(result.estimate.stages[0].key).toBe('local_dsp');
   });
+
+  it('always sends transcribe=false to the estimate endpoint', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const formData = init?.body as FormData;
+      expect(formData.get('transcribe')).toBe('false');
+
+      return new Response(JSON.stringify(validEstimatePayload), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    await estimatePhase1WithBackend(
+      new File(['wave'], 'track.mp3', { type: 'audio/mpeg' }),
+      { apiBaseUrl: 'http://localhost:8000', transcribe: true },
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('analyzePhase1WithBackend structured errors', () => {
@@ -333,5 +356,53 @@ describe('analyzePhase1WithBackend structured errors', () => {
         requestId: 'req_timeout_001',
       },
     });
+  });
+
+  it('sends transcribe=false by default for analysis requests', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const formData = init?.body as FormData;
+      expect(formData.get('transcribe')).toBe('false');
+
+      return new Response(JSON.stringify(validPayload), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    await analyzePhase1WithBackend(
+      new File(['wave'], 'track.mp3', { type: 'audio/mpeg' }),
+      null,
+      { apiBaseUrl: 'http://localhost:8000' },
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends transcribe=true when analysis transcription is enabled', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const formData = init?.body as FormData;
+      expect(formData.get('transcribe')).toBe('true');
+
+      return new Response(JSON.stringify(validPayload), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    await analyzePhase1WithBackend(
+      new File(['wave'], 'track.mp3', { type: 'audio/mpeg' }),
+      null,
+      { apiBaseUrl: 'http://localhost:8000', transcribe: true },
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
