@@ -464,7 +464,7 @@ export default function App() {
                               <div>
                                 <p className="text-[10px] font-mono text-text-secondary uppercase tracking-wider">Local DSP first</p>
                                 <p className="mt-2 text-sm font-bold uppercase tracking-wide text-text-primary">Estimated local analysis</p>
-                                <p className="mt-1 text-xs font-mono uppercase tracking-wider text-text-secondary">
+                                <p className="mt-1 text-xs font-mono tracking-wider text-text-secondary">
                                   {isEstimateLoading
                                     ? 'Calculating estimate...'
                                     : analysisEstimate

@@ -68,7 +68,7 @@ export function AnalysisStatusPanel({
               <Clock3 className="w-4 h-4 text-accent" />
               <span className="text-[10px] font-mono uppercase tracking-wider">Elapsed</span>
             </div>
-            <p className="mt-3 text-sm font-bold uppercase tracking-wide text-text-primary">{formatElapsedLabel(elapsedMs)}</p>
+            <p className="mt-3 text-sm font-bold tracking-wide text-text-primary">{formatElapsedLabel(elapsedMs)}</p>
           </div>
 
           <div className="rounded-sm border border-border bg-bg-card p-3">
@@ -76,7 +76,7 @@ export function AnalysisStatusPanel({
               <TimerReset className="w-4 h-4 text-accent" />
               <span className="text-[10px] font-mono uppercase tracking-wider">Estimated local analysis</span>
             </div>
-            <p className="mt-3 text-sm font-bold uppercase tracking-wide text-text-primary">
+            <p className="mt-3 text-sm font-bold tracking-wide text-text-primary">
               {estimate ? formatEstimateRange(estimate) : 'Unavailable'}
             </p>
           </div>
@@ -89,7 +89,7 @@ export function AnalysisStatusPanel({
             <div key={stage.key} className="rounded-sm border border-border bg-bg-card p-3">
               <div className="flex items-center justify-between gap-4">
                 <span className="text-[10px] font-mono uppercase tracking-wider text-text-secondary">{stage.label}</span>
-                <span className="text-[10px] font-mono uppercase tracking-wider text-text-primary">
+                <span className="text-[10px] font-mono tracking-wider text-text-primary">
                   {formatSecondsLabel(stage.lowMs / 1000)}-{formatSecondsLabel(stage.highMs / 1000)}
                 </span>
               </div>
