@@ -43,10 +43,6 @@ export function toggleOpenKeySet(previous: ReadonlySet<string>, id: string): Set
   return next;
 }
 
-export function characterToggleLabel(isExpanded: boolean): string {
-  return isExpanded ? '▲ LESS' : '▼ MORE';
-}
-
 function Collapsible({ isOpen, children }: { isOpen: boolean; children: React.ReactNode }) {
   return (
     <div
@@ -63,6 +59,21 @@ function confidenceClass(level: string): string {
   if (level === 'High') return 'text-green-500 bg-green-500/10 border-green-500/20';
   if (level === 'Moderate') return 'text-yellow-500 bg-yellow-500/10 border-yellow-500/20';
   return 'text-red-500 bg-red-500/10 border-red-500/20';
+}
+
+function shortenCharacteristicName(name: string): string {
+  return name.trim().split(/\s+/).slice(0, 2).join(' ');
+}
+
+function characteristicPillClass(confidence: string): string {
+  const normalized = String(confidence).trim().toUpperCase();
+  if (normalized === 'HIGH') {
+    return 'bg-green-500/20 text-green-400 border-green-500/30';
+  }
+  if (normalized === 'MED' || normalized === 'MODERATE') {
+    return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+  }
+  return 'bg-red-500/20 text-red-400 border-red-500/30';
 }
 
 function groupIcon(groupName: string): string {
@@ -84,36 +95,15 @@ function groupIcon(groupName: string): string {
   }
 }
 
-const QUIET_SEGMENT_COLOR = '#8b5a00';
-const LOUD_SEGMENT_COLOR = '#f5a623';
+const SEGMENT_ORDER_PALETTE = ['#e05c00', '#c44b8a', '#2d9cdb', '#27ae60'] as const;
 const TRACK_AVERAGE_LUFS = -7.5;
 
-function clamp01(value: number): number {
-  if (value <= 0) return 0;
-  if (value >= 1) return 1;
-  return value;
+function getSegmentPaletteColor(segmentIndex: number): string {
+  return SEGMENT_ORDER_PALETTE[segmentIndex % SEGMENT_ORDER_PALETTE.length];
 }
 
-function hexToRgb(hexColor: string): [number, number, number] {
-  const normalized = hexColor.replace('#', '');
-  const value = Number.parseInt(normalized, 16);
-  return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
-}
-
-function rgbToHex(r: number, g: number, b: number): string {
-  const toHex = (value: number) => value.toString(16).padStart(2, '0');
-  return `#${toHex(Math.round(r))}${toHex(Math.round(g))}${toHex(Math.round(b))}`;
-}
-
-function interpolateHexColor(startHex: string, endHex: string, t: number): string {
-  const [r1, g1, b1] = hexToRgb(startHex);
-  const [r2, g2, b2] = hexToRgb(endHex);
-  const ratio = clamp01(t);
-  return rgbToHex(
-    r1 + (r2 - r1) * ratio,
-    g1 + (g2 - g1) * ratio,
-    b1 + (b2 - b1) * ratio,
-  );
+function withAlpha(hexColor: string, alphaHex: string): string {
+  return `${hexColor}${alphaHex}`;
 }
 
 export function AnalysisResults({ phase1, phase2, sourceFileName = null }: AnalysisResultsProps) {
@@ -121,7 +111,6 @@ export function AnalysisResults({ phase1, phase2, sourceFileName = null }: Analy
   const [openSonic, setOpenSonic] = useState<Set<string>>(new Set());
   const [openMix, setOpenMix] = useState<Record<string, boolean>>({});
   const [openPatch, setOpenPatch] = useState<Record<string, boolean>>({});
-  const [isCharacterExpanded, setIsCharacterExpanded] = useState(false);
 
   if (!phase1) return null;
 
@@ -163,24 +152,9 @@ export function AnalysisResults({ phase1, phase2, sourceFileName = null }: Analy
   const sonicCards = buildSonicElementCards(phase1, phase2?.sonicElements);
   const mixGroups = buildMixChainGroups(phase1, phase2?.mixAndMasterChain, phase2?.sonicElements);
   const patchCards = buildPatchCards(phase1, phase2);
-
-  const trackCharacterText = phase2?.trackCharacter?.trim() || 'SCANNING...';
-  const segmentLufsValues = arrangement?.segments
-    .map((segment) => segment.lufs)
-    .filter((lufs): lufs is number => typeof lufs === 'number' && Number.isFinite(lufs));
-  const minSegmentLufs = segmentLufsValues && segmentLufsValues.length > 0 ? Math.min(...segmentLufsValues) : null;
-  const maxSegmentLufs = segmentLufsValues && segmentLufsValues.length > 0 ? Math.max(...segmentLufsValues) : null;
-
-  const getSegmentColor = (lufs: number | null): string => {
-    if (lufs === null || minSegmentLufs === null || maxSegmentLufs === null) {
-      return interpolateHexColor(QUIET_SEGMENT_COLOR, LOUD_SEGMENT_COLOR, 0.5);
-    }
-    if (minSegmentLufs === maxSegmentLufs) {
-      return interpolateHexColor(QUIET_SEGMENT_COLOR, LOUD_SEGMENT_COLOR, 0.5);
-    }
-    const normalized = (lufs - minSegmentLufs) / (maxSegmentLufs - minSegmentLufs);
-    return interpolateHexColor(QUIET_SEGMENT_COLOR, LOUD_SEGMENT_COLOR, normalized);
-  };
+  const characteristicPills = Array.isArray(phase2?.detectedCharacteristics)
+    ? phase2.detectedCharacteristics.slice(0, 4)
+    : [];
 
   return (
     <motion.div
@@ -281,28 +255,25 @@ export function AnalysisResults({ phase1, phase2, sourceFileName = null }: Analy
 
         <div className="bg-bg-panel border border-border rounded-sm p-1 relative group col-span-1 md:col-span-1 self-start">
           <div className="absolute inset-0 bg-accent/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-          <div
-            className={`bg-bg-card min-h-[170px] p-4 rounded-sm flex flex-col border border-border/50 relative z-10 ${
-              isCharacterExpanded ? 'h-auto items-start text-left' : 'h-full items-center justify-center text-center'
-            }`}
-          >
+          <div className="bg-bg-card h-full min-h-[170px] p-4 rounded-sm flex flex-col border border-border/50 relative z-10">
             <div className="w-full flex justify-between items-start mb-2 opacity-50">
               <Disc className="w-4 h-4 text-accent" />
               <span className="text-[10px] font-mono uppercase">CHARACTER</span>
             </div>
-            <p
-              className={`text-xs font-mono text-text-primary mt-1 w-full px-1 text-left ${
-                isCharacterExpanded ? '' : 'line-clamp-2'
-              }`}
-            >
-              {trackCharacterText}
-            </p>
-            <button
-              onClick={() => setIsCharacterExpanded((prev) => !prev)}
-              className="text-[9px] font-mono text-text-secondary mt-2 pt-1 hover:text-text-primary transition-colors"
-            >
-              {characterToggleLabel(isCharacterExpanded)}
-            </button>
+            {characteristicPills.length > 0 ? (
+              <div className="w-full flex flex-wrap gap-1 mt-1">
+                {characteristicPills.map((item, idx) => (
+                  <span
+                    key={`${item.name}-${idx}`}
+                    className={`inline-flex items-center px-2 py-1 rounded-sm border text-[10px] font-mono uppercase tracking-wide ${characteristicPillClass(item.confidence)}`}
+                  >
+                    {shortenCharacteristicName(item.name)}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs font-mono text-text-secondary mt-1 opacity-70">SCANNING...</p>
+            )}
           </div>
         </div>
       </div>
@@ -378,14 +349,14 @@ export function AnalysisResults({ phase1, phase2, sourceFileName = null }: Analy
           <div className="bg-bg-card border border-border rounded-sm p-4 space-y-4">
             <div className="relative pt-6">
               <div className="relative h-14 border border-border rounded-sm overflow-hidden bg-bg-app">
-                {arrangement.segments.map((segment) => (
+                {arrangement.segments.map((segment, segmentIndex) => (
                   <div
                     key={segment.id}
                     className="absolute top-0 bottom-0 px-2 py-1 border-r border-bg-app/30 text-[10px] font-mono text-white flex items-center justify-center text-center overflow-hidden"
                     style={{
                       left: `${segment.leftPercent}%`,
                       width: `${segment.widthPercent}%`,
-                      backgroundColor: getSegmentColor(segment.lufs),
+                      backgroundColor: getSegmentPaletteColor(segmentIndex),
                     }}
                     title={`${segment.name} • ${segment.lufsLabel}`}
                   >
@@ -429,8 +400,9 @@ export function AnalysisResults({ phase1, phase2, sourceFileName = null }: Analy
             )}
 
             <div className="space-y-2">
-              {arrangement.segments.map((segment) => {
+              {arrangement.segments.map((segment, segmentIndex) => {
                 const isOpen = !!openArrangement[segment.id];
+                const segmentColor = getSegmentPaletteColor(segmentIndex);
                 const lufsDelta = segment.lufs !== null ? segment.lufs - TRACK_AVERAGE_LUFS : null;
                 const lufsDeltaLabel =
                   lufsDelta === null
@@ -445,15 +417,27 @@ export function AnalysisResults({ phase1, phase2, sourceFileName = null }: Analy
                         ? 'text-red-400 border-red-500/30 bg-red-500/10'
                         : 'text-text-secondary border-border bg-bg-panel/40';
                 return (
-                  <div key={`${segment.id}-detail`} className="border border-border rounded-sm overflow-hidden bg-bg-panel/40">
+                  <div
+                    key={`${segment.id}-detail`}
+                    className="border border-border border-l-2 rounded-sm overflow-hidden bg-bg-panel/40"
+                    style={{ borderLeftColor: segmentColor }}
+                  >
                     <button
                       onClick={() => toggleArrangement(segment.id)}
                       className="w-full flex items-center justify-between gap-3 px-3 py-2 text-left hover:bg-bg-card transition-colors"
                     >
                       <div className="flex items-center gap-2 min-w-0">
                         <span className="text-xs">{isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}</span>
-                        <span className="text-xs font-mono text-text-primary truncate">
-                          {segment.name} • {segment.lufsLabel}
+                        <span className="text-xs font-mono text-text-primary truncate">{segment.name}</span>
+                        <span
+                          className="text-[10px] font-mono px-1.5 py-0.5 rounded border whitespace-nowrap"
+                          style={{
+                            backgroundColor: withAlpha(segmentColor, '22'),
+                            borderColor: withAlpha(segmentColor, '66'),
+                            color: segmentColor,
+                          }}
+                        >
+                          {segment.lufsLabel}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
@@ -606,13 +590,13 @@ export function AnalysisResults({ phase1, phase2, sourceFileName = null }: Analy
                   </p>
                 )}
 
-                <div className="flex flex-wrap gap-4">
+                <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
                   {group.cards.map((card) => {
                     const isOpen = !!openMix[card.id];
                     return (
                       <div
                         key={card.id}
-                        className="bg-bg-card border border-border rounded-sm overflow-hidden self-start flex flex-col flex-1 min-w-[280px] basis-full md:basis-[calc(50%-8px)] max-w-full md:max-w-[calc(50%-8px)]"
+                        className="bg-bg-card border border-border rounded-sm overflow-hidden self-start"
                       >
                         <button
                           onClick={() => toggleMix(card.id)}
@@ -683,13 +667,13 @@ export function AnalysisResults({ phase1, phase2, sourceFileName = null }: Analy
             <Sliders className="w-4 h-4 text-accent opacity-70" />
           </div>
 
-          <div className="flex flex-wrap gap-4">
+          <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
             {patchCards.map((patch) => {
               const isOpen = !!openPatch[patch.id];
               return (
                 <div
                   key={patch.id}
-                  className="bg-bg-card border border-border rounded-sm overflow-hidden self-start flex flex-col flex-1 min-w-[280px] basis-full md:basis-[calc(50%-8px)] max-w-full md:max-w-[calc(50%-8px)]"
+                  className="bg-bg-card border border-border rounded-sm overflow-hidden self-start"
                 >
                   <button
                     onClick={() => togglePatch(patch.id)}

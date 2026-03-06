@@ -1,6 +1,6 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { AnalysisResults, characterToggleLabel, toggleOpenKeySet } from '../../src/components/AnalysisResults';
+import { AnalysisResults, toggleOpenKeySet } from '../../src/components/AnalysisResults';
 import { MIDI_DOWNLOAD_FILE_NAME } from '../../src/components/SessionMusicianPanel';
 import { Phase1Result, Phase2Result } from '../../src/types';
 
@@ -99,7 +99,7 @@ describe('AnalysisResults UI wiring', () => {
     expect(initial.has('bass')).toBe(false);
   });
 
-  it('renders mix and patch cards using flex-wrap layout without grid test ids', () => {
+  it('renders mix and patch cards using strict grid layout', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
         phase1: basePhase1,
@@ -108,27 +108,52 @@ describe('AnalysisResults UI wiring', () => {
       }),
     );
 
-    expect(html).toContain('class="flex flex-wrap gap-4"');
+    expect(html).toContain('class="grid gap-4 grid-cols-1 md:grid-cols-2"');
+    expect(html).not.toContain('class="flex flex-wrap gap-4"');
     expect(html).not.toContain('data-testid="mix-group-grid-');
     expect(html).not.toContain('data-testid="patch-grid"');
   });
 
-  it('renders character card with collapsed toggle by default', () => {
+  it('renders character pills from the first four detected characteristics with shortened names', () => {
+    const phase2WithTags: Phase2Result = {
+      ...basePhase2,
+      detectedCharacteristics: [
+        { name: 'Wide Stereo Discipline', confidence: 'HIGH', explanation: 'Controlled width and correlation.' },
+        { name: 'Transient Shape', confidence: 'MED', explanation: 'Defined drum edges.' },
+        { name: 'Bass Weight', confidence: 'LOW', explanation: 'Sub support is moderate.' },
+        { name: 'Top End Texture', confidence: 'MODERATE', explanation: 'Fine-grain sparkle.' },
+        { name: 'Ignore This Extra', confidence: 'HIGH', explanation: 'Should not show in top four pills.' },
+      ],
+    };
+
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
         phase1: basePhase1,
-        phase2: basePhase2,
+        phase2: phase2WithTags,
         sourceFileName: 'example.wav',
       }),
     );
 
-    expect(html).toContain('line-clamp-2');
-    expect(html).toContain('▼ MORE');
+    expect(html).toContain('>Wide Stereo</span>');
+    expect(html).toContain('>Transient Shape</span>');
+    expect(html).toContain('>Bass Weight</span>');
+    expect(html).toContain('>Top End</span>');
+    expect(html).not.toContain('>Ignore This</span>');
+    expect(html).toContain('bg-green-500/20 text-green-400 border-green-500/30');
+    expect(html).toContain('bg-yellow-500/20 text-yellow-400 border-yellow-500/30');
+    expect(html).toContain('bg-red-500/20 text-red-400 border-red-500/30');
   });
 
-  it('returns expected character toggle labels', () => {
-    expect(characterToggleLabel(false)).toBe('▼ MORE');
-    expect(characterToggleLabel(true)).toBe('▲ LESS');
+  it('renders character scanning fallback when phase2 is unavailable', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: basePhase1,
+        phase2: null,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).toContain('SCANNING...');
   });
 
   it('uses normalized midi download filename', () => {
@@ -148,7 +173,7 @@ describe('AnalysisResults UI wiring', () => {
     expect(html).toContain('Re-run analysis with FLAC source for melody extraction, or paste DSP JSON with melodyDetail field populated');
   });
 
-  it('renders arrangement novelty and spectral note labels', () => {
+  it('renders arrangement novelty and spectral note labels with fixed segment palette colors', () => {
     const html = renderToStaticMarkup(
       React.createElement(AnalysisResults, {
         phase1: basePhase1,
@@ -157,6 +182,8 @@ describe('AnalysisResults UI wiring', () => {
       }),
     );
 
+    expect(html).toContain('#e05c00');
+    expect(html).toContain('#c44b8a');
     expect(html).toContain('NOVELTY EVENTS');
     expect(html).toContain('SPECTRAL NOTE');
     expect(html).toContain('▲ +0.5 dB');
