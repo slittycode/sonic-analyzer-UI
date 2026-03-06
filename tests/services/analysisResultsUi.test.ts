@@ -73,6 +73,13 @@ const basePhase2: Phase2Result = {
       value: '30 Hz',
       reason: 'Removes rumble from bass bus.',
     },
+    {
+      order: 3,
+      device: 'Auto Filter',
+      parameter: 'High Shelf',
+      value: '+2.0 dB @ 10 kHz',
+      reason: 'Adds sparkle to hi-hats and vocal chops in the top end.',
+    },
   ],
   secretSauce: {
     title: 'Punch Layering',
@@ -80,6 +87,16 @@ const basePhase2: Phase2Result = {
     implementationSteps: ['Step 1', 'Step 2'],
   },
   confidenceNotes: [{ field: 'Key Signature', value: 'HIGH', reason: 'Stable detection.' }],
+  abletonRecommendations: [
+    {
+      device: 'Operator',
+      category: 'SYNTHESIS',
+      parameter: 'Coarse',
+      value: '1.00',
+      reason: 'Matches tonal center.',
+      advancedTip: 'Modulate coarse slowly.',
+    },
+  ],
 };
 
 describe('AnalysisResults UI wiring', () => {
@@ -108,7 +125,9 @@ describe('AnalysisResults UI wiring', () => {
       }),
     );
 
-    expect(html).toContain('class="grid gap-4 grid-cols-1 md:grid-cols-2"');
+    expect((html.match(/class=\"grid gap-4 grid-cols-2\"/g) ?? []).length).toBeGreaterThanOrEqual(2);
+    expect(html).toContain('DRUM PROCESSING / BASS PROCESSING');
+    expect(html).toContain('HIGH-END DETAIL / MASTER BUS');
     expect(html).not.toContain('class="flex flex-wrap gap-4"');
     expect(html).not.toContain('data-testid="mix-group-grid-');
     expect(html).not.toContain('data-testid="patch-grid"');

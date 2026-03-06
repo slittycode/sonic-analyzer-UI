@@ -99,7 +99,7 @@ export interface MixChainCardViewModel {
 }
 
 export interface MixChainGroupViewModel {
-  name: ProcessingGroup;
+  name: string;
   cards: MixChainCardViewModel[];
   annotation?: string;
 }
@@ -767,6 +767,73 @@ function makeLimiterFallbackCard(phase1: Phase1Result, nextOrder: number): MixCh
   };
 }
 
+function mergeGroupAnnotations(left?: string, right?: string): string | undefined {
+  const parts = [left, right].filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+  return parts.length > 0 ? parts.join(" • ") : undefined;
+}
+
+function mergeDisplayGroups(left: MixChainGroupViewModel, right: MixChainGroupViewModel): MixChainGroupViewModel {
+  return {
+    name: `${left.name} / ${right.name}`,
+    cards: [...left.cards, ...right.cards],
+    annotation: mergeGroupAnnotations(left.annotation, right.annotation),
+  };
+}
+
+function compactMixChainGroups(groups: MixChainGroupViewModel[]): MixChainGroupViewModel[] {
+  if (groups.length <= 1) return groups;
+
+  const compacted: MixChainGroupViewModel[] = [];
+  let index = 0;
+
+  while (index < groups.length) {
+    const current = groups[index];
+    if (!current) break;
+
+    if (current.cards.length !== 1) {
+      compacted.push({
+        name: current.name,
+        cards: [...current.cards],
+        annotation: current.annotation,
+      });
+      index += 1;
+      continue;
+    }
+
+    const next = groups[index + 1];
+    if (next && next.cards.length === 1) {
+      compacted.push(mergeDisplayGroups(current, next));
+      index += 2;
+      continue;
+    }
+
+    if (compacted.length > 0) {
+      const previous = compacted[compacted.length - 1];
+      if (previous) {
+        previous.cards = [...previous.cards, ...current.cards];
+        previous.annotation = mergeGroupAnnotations(previous.annotation, current.annotation);
+      }
+      index += 1;
+      continue;
+    }
+
+    if (next) {
+      compacted.push(mergeDisplayGroups(current, next));
+      index += 2;
+      continue;
+    }
+
+    compacted.push({
+      name: current.name,
+      cards: [...current.cards],
+      annotation: current.annotation,
+    });
+    index += 1;
+  }
+
+  return compacted;
+}
+
 export function buildMixChainGroups(
   phase1: Phase1Result,
   chain: Phase2Result["mixAndMasterChain"] | undefined,
@@ -827,7 +894,7 @@ export function buildMixChainGroups(
       grouped.get(card.group)?.push(card);
     });
 
-  return GROUP_ORDER.map((group) => {
+  const displayGroups = GROUP_ORDER.map((group) => {
     const groupCards = grouped.get(group) ?? [];
     const uniqueHighEndCues = group === "HIGH-END DETAIL"
       ? Array.from(new Set(groupCards.flatMap((card) => card.highEndCues ?? [])))
@@ -841,6 +908,8 @@ export function buildMixChainGroups(
         : undefined,
     };
   }).filter((group) => group.cards.length > 0);
+
+  return compactMixChainGroups(displayGroups);
 }
 
 function mapPatchRole(category: string): string {

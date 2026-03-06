@@ -118,7 +118,7 @@ describe('analysisResultsViewModel helpers', () => {
     expect(widthCard?.description.includes('Seven sentence.')).toBe(false);
   });
 
-  it('builds ordered mix groups with high-end detail stage and ensures master limiter fallback', () => {
+  it('compacts singleton mix groups into multi-card display groups', () => {
     const groups = buildMixChainGroups(
       phase1,
       [
@@ -154,12 +154,24 @@ describe('analysisResultsViewModel helpers', () => {
       },
     );
 
-    const highEnd = groups.find((group) => group.name === 'HIGH-END DETAIL');
-    const master = groups.find((group) => group.name === 'MASTER BUS');
-    expect(highEnd).toBeDefined();
-    expect(highEnd?.annotation).toContain('Annotated high-end focus');
-    expect(master).toBeDefined();
-    expect(master?.cards.some((card) => /limiter/i.test(card.device))).toBe(true);
+    expect(groups).toEqual([
+      expect.objectContaining({
+        name: 'DRUM PROCESSING / BASS PROCESSING',
+        cards: expect.arrayContaining([
+          expect.objectContaining({ device: 'Drum Buss' }),
+          expect.objectContaining({ device: 'EQ Eight' }),
+        ]),
+      }),
+      expect.objectContaining({
+        name: 'HIGH-END DETAIL / MASTER BUS',
+        cards: expect.arrayContaining([
+          expect.objectContaining({ device: 'Auto Filter' }),
+          expect.objectContaining({ device: 'Limiter' }),
+        ]),
+      }),
+    ]);
+    expect(groups.every((group) => group.cards.length >= 2)).toBe(true);
+    expect(groups[1]?.annotation).toContain('Annotated high-end focus');
   });
 
   it('builds expanded patch cards with at least three parameters', () => {

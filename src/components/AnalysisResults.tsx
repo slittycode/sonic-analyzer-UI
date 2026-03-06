@@ -77,22 +77,13 @@ function characteristicPillClass(confidence: string): string {
 }
 
 function groupIcon(groupName: string): string {
-  switch (groupName) {
-    case 'DRUM PROCESSING':
-      return '🥁';
-    case 'BASS PROCESSING':
-      return '🫧';
-    case 'SYNTH / MELODIC':
-      return '🎹';
-    case 'MID PROCESSING':
-      return '🎚';
-    case 'HIGH-END DETAIL':
-      return '✨';
-    case 'MASTER BUS':
-      return '🧱';
-    default:
-      return '🎛';
-  }
+  if (groupName.includes('DRUM PROCESSING')) return '🥁';
+  if (groupName.includes('BASS PROCESSING')) return '🫧';
+  if (groupName.includes('SYNTH / MELODIC')) return '🎹';
+  if (groupName.includes('MID PROCESSING')) return '🎚';
+  if (groupName.includes('HIGH-END DETAIL')) return '✨';
+  if (groupName.includes('MASTER BUS')) return '🧱';
+  return '🎛';
 }
 
 const SEGMENT_ORDER_PALETTE = ['#e05c00', '#c44b8a', '#2d9cdb', '#27ae60'] as const;
@@ -590,7 +581,7 @@ export function AnalysisResults({ phase1, phase2, sourceFileName = null }: Analy
                   </p>
                 )}
 
-                <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
+                <div className="grid gap-4 grid-cols-2">
                   {group.cards.map((card) => {
                     const isOpen = !!openMix[card.id];
                     return (
@@ -667,7 +658,7 @@ export function AnalysisResults({ phase1, phase2, sourceFileName = null }: Analy
             <Sliders className="w-4 h-4 text-accent opacity-70" />
           </div>
 
-          <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
+          <div className="grid gap-4 grid-cols-2">
             {patchCards.map((patch) => {
               const isOpen = !!openPatch[patch.id];
               return (
