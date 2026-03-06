@@ -384,6 +384,32 @@ function midiToNoteName(midi: number): string {
 }
 
 export function buildMelodyInsights(phase1: Phase1Result): MelodyInsightsViewModel | null {
+  const transcriptionDetail =
+    phase1.transcriptionDetail && phase1.transcriptionDetail.noteCount > 0 ? phase1.transcriptionDetail : null;
+  if (transcriptionDetail) {
+    const noteCount = Number.isFinite(transcriptionDetail.noteCount)
+      ? Math.max(0, Math.round(transcriptionDetail.noteCount))
+      : 0;
+    const dominantNotes = Array.isArray(transcriptionDetail.dominantPitches)
+      ? transcriptionDetail.dominantPitches.map((note) => note.pitchName)
+      : [];
+    const hasRange = transcriptionDetail.pitchRange.minName !== null && transcriptionDetail.pitchRange.maxName !== null;
+    const rangeLabel = hasRange
+      ? `${transcriptionDetail.pitchRange.minName as string} - ${transcriptionDetail.pitchRange.maxName as string}`
+      : "n/a";
+    const confidence = Math.max(0, Math.min(1, transcriptionDetail.averageConfidence ?? 0));
+    const confidenceLabel: ConfidenceLevel = confidence >= 0.8 ? "High" : confidence >= 0.5 ? "Moderate" : "Low";
+
+    return {
+      noteCount,
+      dominantNotes,
+      rangeLabel,
+      confidence,
+      confidenceLabel,
+      isDraft: confidence < 0.15,
+    };
+  }
+
   const detail = phase1.melodyDetail;
   if (!detail) return null;
 

@@ -23,6 +23,35 @@ export interface MelodyDetail {
   vibratoConfidence: number;
 }
 
+export interface TranscriptionNote {
+  pitchMidi: number;
+  pitchName: string;
+  onsetSeconds: number;
+  durationSeconds: number;
+  confidence: number;
+  stemSource: "bass" | "other" | "full_mix";
+}
+
+export interface TranscriptionDetail {
+  transcriptionMethod: string;
+  noteCount: number;
+  averageConfidence: number;
+  stemSeparationUsed: boolean;
+  stemsTranscribed: string[];
+  dominantPitches: Array<{
+    pitchMidi: number;
+    pitchName: string;
+    count: number;
+  }>;
+  pitchRange: {
+    minMidi: number | null;
+    maxMidi: number | null;
+    minName: string | null;
+    maxName: string | null;
+  };
+  notes: TranscriptionNote[];
+}
+
 export interface Phase1Result {
   bpm: number;
   bpmConfidence: number;
@@ -31,9 +60,12 @@ export interface Phase1Result {
   timeSignature: string;
   durationSeconds: number;
   lufsIntegrated: number;
+  lufsRange?: number | null;
   truePeak: number;
+  crestFactor?: number | null;
   stereoWidth: number;
   stereoCorrelation: number;
+  stereoDetail?: Record<string, unknown> | null;
   spectralBalance: {
     subBass: number;
     lowBass: number;
@@ -42,19 +74,33 @@ export interface Phase1Result {
     highs: number;
     brilliance: number;
   };
+  spectralDetail?: Record<string, unknown> | null;
+  rhythmDetail?: Record<string, unknown> | null;
   melodyDetail?: MelodyDetail;
+  transcriptionDetail?: TranscriptionDetail | null;
+  grooveDetail?: Record<string, unknown> | null;
+  sidechainDetail?: Record<string, unknown> | null;
+  effectsDetail?: Record<string, unknown> | null;
+  synthesisCharacter?: Record<string, unknown> | null;
+  danceability?: number | null;
+  structure?: Record<string, unknown> | null;
+  arrangementDetail?: Record<string, unknown> | null;
+  segmentLoudness?: unknown[] | null;
+  segmentSpectral?: unknown[] | null;
+  segmentKey?: unknown[] | null;
+  chordDetail?: Record<string, unknown> | null;
+  perceptual?: Record<string, unknown> | null;
 }
 
 export type RecommendationCategory =
-  | "Dynamics"
+  | "SYNTHESIS"
+  | "DYNAMICS"
   | "EQ"
-  | "Saturation"
-  | "Space"
-  | "Modulation"
-  | "Utility"
-  | "Synth"
-  | "Sampler"
-  | "Other";
+  | "EFFECTS"
+  | "STEREO"
+  | "MASTERING"
+  | "MIDI"
+  | "ROUTING";
 
 export interface AbletonRecommendation {
   device: string;
@@ -72,7 +118,7 @@ export interface Phase2Result {
     confidence: "HIGH" | "MED" | "LOW";
     explanation: string;
   }[];
-  arrangementOverview?: {
+  arrangementOverview: {
     summary: string;
     segments: Array<{
       index: number;
@@ -93,7 +139,7 @@ export interface Phase2Result {
     widthAndStereo?: string;
     harmonicContent?: string;
   };
-  mixAndMasterChain?: Array<{
+  mixAndMasterChain: Array<{
     order: number;
     device: string;
     parameter: string;
@@ -111,12 +157,17 @@ export interface Phase2Result {
     value: string;
     reason: string;
   }[];
-  abletonRecommendations?: AbletonRecommendation[];
+  abletonRecommendations: AbletonRecommendation[];
 }
 
 export interface BackendDiagnostics {
   backendDurationMs: number;
-  engineVersion: string;
+  engineVersion?: string;
+  estimatedLowMs?: number;
+  estimatedHighMs?: number;
+  timeoutSeconds?: number;
+  stdoutSnippet?: string;
+  stderrSnippet?: string;
 }
 
 export interface BackendAnalyzeResponse {
@@ -124,6 +175,40 @@ export interface BackendAnalyzeResponse {
   phase1: Phase1Result;
   diagnostics?: BackendDiagnostics;
 }
+
+export interface BackendEstimateStage {
+  key: string;
+  label: string;
+  lowMs: number;
+  highMs: number;
+}
+
+export interface BackendAnalysisEstimate {
+  durationSeconds: number;
+  totalLowMs: number;
+  totalHighMs: number;
+  stages: BackendEstimateStage[];
+}
+
+export interface BackendEstimateResponse {
+  requestId: string;
+  estimate: BackendAnalysisEstimate;
+}
+
+export interface BackendErrorPayload {
+  code: string;
+  message: string;
+  phase: string;
+  retryable: boolean;
+}
+
+export interface BackendErrorResponse {
+  requestId: string;
+  error: BackendErrorPayload;
+  diagnostics?: BackendDiagnostics;
+}
+
+export type DiagnosticLogStatus = "running" | "success" | "error" | "skipped";
 
 export interface DiagnosticLogEntry {
   model: string;
@@ -139,4 +224,9 @@ export interface DiagnosticLogEntry {
   timestamp: string;
   requestId?: string;
   source?: "backend" | "gemini" | "system";
+  status?: DiagnosticLogStatus;
+  message?: string;
+  errorCode?: string;
+  estimateLowMs?: number;
+  estimateHighMs?: number;
 }

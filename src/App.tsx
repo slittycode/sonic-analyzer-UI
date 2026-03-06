@@ -1,12 +1,25 @@
-import React, { useState } from 'react';
-import { FileUpload } from './components/FileUpload';
-import { AnalysisResults } from './components/AnalysisResults';
-import { DiagnosticLog } from './components/DiagnosticLog';
-import { WaveformPlayer } from './components/WaveformPlayer';
-import { EQSpinner } from './components/EQSpinner';
-import { analyzeAudio, isPhase2GeminiEnabled } from './services/analyzer';
-import { Phase1Result, Phase2Result, DiagnosticLogEntry } from './types';
+import React, { useEffect, useRef, useState } from 'react';
 import { AudioWaveform, Sparkles, Activity } from 'lucide-react';
+
+import { AnalysisResults } from './components/AnalysisResults';
+import { AnalysisStatusPanel } from './components/AnalysisStatusPanel';
+import { DiagnosticLog } from './components/DiagnosticLog';
+import { FileUpload } from './components/FileUpload';
+import { WaveformPlayer } from './components/WaveformPlayer';
+import { appConfig } from './config';
+import { analyzeAudio, isPhase2GeminiEnabled } from './services/analyzer';
+import {
+  BackendClientError,
+  estimatePhase1WithBackend,
+  mapBackendError,
+} from './services/backendPhase1Client';
+import { PHASE1_LABEL, PHASE2_LABEL } from './services/phaseLabels';
+import {
+  BackendAnalysisEstimate,
+  DiagnosticLogEntry,
+  Phase1Result,
+  Phase2Result,
+} from './types';
 
 const MODELS = [
   { id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro Preview (Recommended)' },
@@ -17,22 +30,99 @@ const MODELS = [
   { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
 ];
 
+function buildAudioMetadata(file: File): DiagnosticLogEntry["audioMetadata"] {
+  return {
+    name: file.name,
+    size: file.size,
+    type: file.type || 'audio/mp3',
+  };
+}
+
+function replaceRunningLog(
+  logs: DiagnosticLogEntry[],
+  source: DiagnosticLogEntry["source"],
+  nextLog: DiagnosticLogEntry,
+): DiagnosticLogEntry[] {
+  return [...logs.filter((entry) => !(entry.source === source && entry.status === 'running')), nextLog];
+}
+
+function formatEstimateRange(estimate: BackendAnalysisEstimate): string {
+  return `${Math.round(estimate.totalLowMs / 1000)}s-${Math.round(estimate.totalHighMs / 1000)}s`;
+}
+
 export default function App() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [currentPhase, setCurrentPhase] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState(MODELS[0].id);
   const phase2Enabled = isPhase2GeminiEnabled();
-  
+
   const [phase1Result, setPhase1Result] = useState<Phase1Result | null>(null);
   const [phase2Result, setPhase2Result] = useState<Phase2Result | null>(null);
   const [logs, setLogs] = useState<DiagnosticLogEntry[]>([]);
-  
+
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  
+
   const [dspJsonInput, setDspJsonInput] = useState("");
   const [dspJsonError, setDspJsonError] = useState<string | null>(null);
+  const [analysisEstimate, setAnalysisEstimate] = useState<BackendAnalysisEstimate | null>(null);
+  const [isEstimateLoading, setIsEstimateLoading] = useState(false);
+  const [estimateError, setEstimateError] = useState<string | null>(null);
+  const [elapsedMs, setElapsedMs] = useState(0);
+
+  const phase1CompletedRef = useRef(false);
+  const analysisStartedAtRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!audioFile) {
+      setAnalysisEstimate(null);
+      setIsEstimateLoading(false);
+      setEstimateError(null);
+      return;
+    }
+
+    let isCancelled = false;
+    setAnalysisEstimate(null);
+    setEstimateError(null);
+    setIsEstimateLoading(true);
+
+    estimatePhase1WithBackend(audioFile, { apiBaseUrl: appConfig.apiBaseUrl })
+      .then((result) => {
+        if (isCancelled) return;
+        setAnalysisEstimate(result.estimate);
+      })
+      .catch((rawError) => {
+        if (isCancelled) return;
+        const mapped = mapBackendError(rawError);
+        setEstimateError(mapped.message);
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setIsEstimateLoading(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [audioFile]);
+
+  useEffect(() => {
+    if (!isAnalyzing || analysisStartedAtRef.current === null) {
+      setElapsedMs(0);
+      return;
+    }
+
+    const updateElapsed = () => {
+      if (analysisStartedAtRef.current === null) return;
+      setElapsedMs(Date.now() - analysisStartedAtRef.current);
+    };
+
+    updateElapsed();
+    const intervalId = window.setInterval(updateElapsed, 250);
+    return () => window.clearInterval(intervalId);
+  }, [isAnalyzing]);
 
   const handleJsonChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
@@ -41,7 +131,7 @@ export default function App() {
       try {
         JSON.parse(val);
         setDspJsonError(null);
-      } catch (err) {
+      } catch {
         setDspJsonError("Invalid JSON format. Will proceed with audio-only analysis if started.");
       }
     } else {
@@ -53,12 +143,14 @@ export default function App() {
     if (audioUrl) URL.revokeObjectURL(audioUrl);
     setAudioFile(file);
     setAudioUrl(URL.createObjectURL(file));
-    // Reset previous analysis
     setPhase1Result(null);
     setPhase2Result(null);
     setLogs([]);
     setError(null);
     setCurrentPhase(0);
+    phase1CompletedRef.current = false;
+    analysisStartedAtRef.current = null;
+    setElapsedMs(0);
   };
 
   const handleFileClear = () => {
@@ -70,59 +162,167 @@ export default function App() {
     setLogs([]);
     setError(null);
     setCurrentPhase(0);
+    setAnalysisEstimate(null);
+    setEstimateError(null);
+    setIsEstimateLoading(false);
+    phase1CompletedRef.current = false;
+    analysisStartedAtRef.current = null;
+    setElapsedMs(0);
   };
 
   const handleStartAnalysis = async () => {
     if (!audioFile) return;
-    
+
     let validJson: string | null = null;
     if (dspJsonInput.trim()) {
       try {
         JSON.parse(dspJsonInput);
         validJson = dspJsonInput;
-      } catch (err) {
-        // Validation already warns user, we proceed with null
+      } catch {
+        validJson = null;
       }
     }
-    
+
+    const activeFile = audioFile;
+    const activeModel = selectedModel;
+    const activeEstimate = analysisEstimate;
+    const audioMetadata = buildAudioMetadata(activeFile);
+
     setIsAnalyzing(true);
     setCurrentPhase(1);
     setError(null);
+    phase1CompletedRef.current = false;
+    analysisStartedAtRef.current = Date.now();
+
+    setLogs([
+      {
+        model: 'local-dsp-engine',
+        phase: PHASE1_LABEL,
+        promptLength: validJson?.length ?? 0,
+        responseLength: 0,
+        durationMs: 0,
+        audioMetadata,
+        timestamp: new Date().toISOString(),
+        source: 'backend',
+        status: 'running',
+        message: 'Request in flight',
+        estimateLowMs: activeEstimate?.totalLowMs,
+        estimateHighMs: activeEstimate?.totalHighMs,
+      },
+    ]);
 
     try {
       await analyzeAudio(
-        audioFile,
-        selectedModel,
+        activeFile,
+        activeModel,
         validJson,
         (result, log) => {
+          phase1CompletedRef.current = true;
           setPhase1Result(result);
-          setLogs(prev => [...prev, log]);
-          setCurrentPhase(2);
+          setLogs((prev) => {
+            const nextLogs = replaceRunningLog(prev, 'backend', {
+              ...log,
+              status: 'success',
+              message: log.message ?? 'Local DSP analysis complete.',
+              estimateLowMs: activeEstimate?.totalLowMs,
+              estimateHighMs: activeEstimate?.totalHighMs,
+            });
+
+            if (!phase2Enabled) {
+              return nextLogs;
+            }
+
+            return [
+              ...nextLogs,
+              {
+                model: activeModel,
+                phase: PHASE2_LABEL,
+                promptLength: 0,
+                responseLength: 0,
+                durationMs: 0,
+                audioMetadata,
+                timestamp: new Date().toISOString(),
+                source: 'gemini',
+                status: 'running',
+                message: 'Generating advisory output',
+              },
+            ];
+          });
+          setCurrentPhase(phase2Enabled ? 2 : 1);
         },
         (result, log) => {
           setPhase2Result(result);
-          setLogs(prev => [...prev, log]);
+          setLogs((prev) => {
+            if (phase2Enabled) {
+              return replaceRunningLog(prev, 'gemini', {
+                ...log,
+                status: log.status ?? (result ? 'success' : 'skipped'),
+                message: log.message ?? (result ? 'Phase 2 advisory complete.' : 'Phase 2 advisory skipped.'),
+              });
+            }
+            return [...prev, log];
+          });
           setCurrentPhase(0);
           setIsAnalyzing(false);
+          analysisStartedAtRef.current = null;
+          setElapsedMs(0);
         },
-        (err) => {
+        (rawError) => {
+          const err = rawError instanceof Error ? rawError : new Error(String(rawError));
+          const isPhase1Failure = !phase1CompletedRef.current;
+          const backendError = err instanceof BackendClientError ? err : null;
+
+          setLogs((prev) => [
+            ...prev.filter((entry) => !(entry.status === 'running' && entry.source === (isPhase1Failure ? 'backend' : 'gemini'))),
+            {
+              model: isPhase1Failure ? 'local-dsp-engine' : activeModel,
+              phase: isPhase1Failure ? PHASE1_LABEL : PHASE2_LABEL,
+              promptLength: isPhase1Failure ? validJson?.length ?? 0 : 0,
+              responseLength: 0,
+              durationMs: elapsedMs,
+              audioMetadata,
+              timestamp: new Date().toISOString(),
+              requestId: backendError?.details?.requestId,
+              source: isPhase1Failure ? 'backend' : 'gemini',
+              status: 'error',
+              message: err.message,
+              errorCode: backendError?.details?.serverCode ?? backendError?.code,
+              estimateLowMs: isPhase1Failure ? activeEstimate?.totalLowMs : undefined,
+              estimateHighMs: isPhase1Failure ? activeEstimate?.totalHighMs : undefined,
+            },
+          ]);
+
           setError(err.message);
           setIsAnalyzing(false);
           setCurrentPhase(0);
-        }
+          analysisStartedAtRef.current = null;
+          setElapsedMs(0);
+        },
       );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+    } catch (rawError) {
+      const err = rawError instanceof Error ? rawError : new Error(String(rawError));
+      setError(err.message);
       setIsAnalyzing(false);
       setCurrentPhase(0);
+      analysisStartedAtRef.current = null;
+      setElapsedMs(0);
     }
   };
+
+  const statusTitle = currentPhase === 2 ? PHASE2_LABEL : PHASE1_LABEL;
+  const statusSummary =
+    currentPhase === 2
+      ? 'Generating the advisory pass from completed local DSP measurements.'
+      : 'Running the local DSP engine against the uploaded track.';
+  const statusDetail =
+    currentPhase === 2
+      ? 'Phase 1 is complete. Phase 2 is optional and UI-owned.'
+      : 'Measuring tempo, key, loudness, stereo, rhythm, melody, and spectral balance.';
+  const statusRequestState = currentPhase === 2 ? 'Generating advisory output' : 'Request in flight';
 
   return (
     <div className="min-h-screen p-4 md:p-8 font-sans flex items-center justify-center bg-bg-app">
       <div className="w-full max-w-6xl bg-bg-panel border border-border rounded-sm shadow-md overflow-hidden flex flex-col">
-        
-        {/* Top Toolbar (Ableton style) */}
         <div className="h-10 bg-[#222] border-b border-border flex items-center justify-between px-4">
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
@@ -130,12 +330,12 @@ export default function App() {
               <span className="text-xs font-bold text-text-primary tracking-wide">SonicAnalyzer</span>
             </div>
             <div className="h-4 w-px bg-border"></div>
-            <span className="text-[10px] font-mono text-text-secondary uppercase">Live 12 Integration</span>
+            <span className="text-[10px] font-mono text-text-secondary uppercase">Local DSP Engine</span>
           </div>
-          
+
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
-              <label className="text-[10px] font-mono text-text-secondary uppercase">Model</label>
+              <label className="text-[10px] font-mono text-text-secondary uppercase">Phase 2 Model</label>
               <select
                 value={selectedModel}
                 onChange={(e) => setSelectedModel(e.target.value)}
@@ -162,13 +362,8 @@ export default function App() {
           </div>
         </div>
 
-        {/* Main Interface Area */}
         <div className="p-4 md:p-6 space-y-6 flex-grow">
-          
-          {/* Main Content */}
           <main className="space-y-6">
-            
-            {/* Upload & Preview Section */}
             <section className="grid grid-cols-1 lg:grid-cols-12 gap-4">
               <div className="lg:col-span-4 flex flex-col gap-4">
                 <div className="flex flex-col">
@@ -205,27 +400,66 @@ export default function App() {
                 <div className="bg-[#222] border border-border border-b-0 rounded-t-sm px-3 py-1.5 flex items-center justify-between">
                   <div className="flex items-center">
                     <span className={`w-2 h-2 rounded-full mr-2 ${audioUrl ? 'bg-green-500' : 'bg-border'}`}></span>
-                    <h3 className="text-[10px] font-mono text-text-secondary uppercase tracking-wider">Signal Monitor</h3>
+                    <h3 className="text-[10px] font-mono text-text-secondary uppercase tracking-wider">
+                      {isAnalyzing ? 'Local DSP Status' : 'Signal Monitor'}
+                    </h3>
                   </div>
                 </div>
-                
+
                 <div className="flex-grow bg-bg-card border border-border rounded-b-sm p-4 relative flex flex-col">
                   {audioUrl && audioFile ? (
-                    <div className="h-full flex flex-col justify-between relative z-10">
-                      <WaveformPlayer audioUrl={audioUrl} audioFile={audioFile} />
-                      
-                      {!isAnalyzing && currentPhase === 0 && !phase1Result && (
-                        <div className="mt-4 flex justify-end">
-                          <button
-                            onClick={handleStartAnalysis}
-                            className="bg-accent hover:bg-[#ff9933] text-bg-app font-bold py-2 px-6 rounded-sm flex items-center transition-colors uppercase tracking-wider font-mono text-xs"
-                          >
-                            <Sparkles className="w-3 h-3 mr-2" />
-                            Initiate Analysis
-                          </button>
-                        </div>
-                      )}
-                    </div>
+                    isAnalyzing ? (
+                      <AnalysisStatusPanel
+                        title={statusTitle}
+                        summary={statusSummary}
+                        detail={statusDetail}
+                        requestState={statusRequestState}
+                        elapsedMs={elapsedMs}
+                        estimate={analysisEstimate}
+                      />
+                    ) : (
+                      <div className="h-full flex flex-col justify-between relative z-10 gap-4">
+                        <WaveformPlayer audioUrl={audioUrl} audioFile={audioFile} />
+
+                        {!phase1Result && (
+                          <div className="rounded-sm border border-border bg-bg-panel p-4 space-y-3">
+                            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+                              <div>
+                                <p className="text-[10px] font-mono text-text-secondary uppercase tracking-wider">Local DSP first</p>
+                                <p className="mt-2 text-sm font-bold uppercase tracking-wide text-text-primary">Estimated local analysis</p>
+                                <p className="mt-1 text-xs font-mono uppercase tracking-wider text-text-secondary">
+                                  {isEstimateLoading
+                                    ? 'Calculating estimate...'
+                                    : analysisEstimate
+                                      ? formatEstimateRange(analysisEstimate)
+                                      : 'Unavailable'}
+                                </p>
+                              </div>
+                              <div className="max-w-xs text-[10px] font-mono uppercase tracking-wider text-text-secondary leading-relaxed">
+                                Phase 1 runs on the local DSP backend. Phase 2 advisory only starts after Phase 1 succeeds.
+                              </div>
+                            </div>
+                            {estimateError && (
+                              <p className="text-[10px] font-mono text-yellow-400 uppercase tracking-wider">
+                                Estimate unavailable: {estimateError}
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        {!phase1Result && (
+                          <div className="mt-2 flex justify-end">
+                            <button
+                              onClick={handleStartAnalysis}
+                              className="bg-accent hover:bg-[#ff9933] text-bg-app font-bold py-2 px-6 rounded-sm flex items-center transition-colors uppercase tracking-wider font-mono text-xs"
+                            >
+                              <Sparkles className="w-3 h-3 mr-2" />
+                              Initiate Analysis
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )
                   ) : (
                     <div className="h-full flex flex-col items-center justify-center text-text-secondary opacity-50 font-mono text-xs border border-dashed border-border rounded-sm m-2 min-h-[150px] bg-bg-app">
                       <Activity className="w-8 h-8 mb-2" />
@@ -236,7 +470,6 @@ export default function App() {
               </div>
             </section>
 
-            {/* Status Display */}
             {error && (
               <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-sm text-red-400 text-xs font-mono flex items-center">
                 <div className="w-2 h-2 bg-red-500 rounded-full mr-2"></div>
@@ -244,22 +477,8 @@ export default function App() {
               </div>
             )}
 
-            {isAnalyzing && (
-              <div className="flex flex-col items-center justify-center p-8 border border-border bg-bg-card rounded-sm relative overflow-hidden">
-                <EQSpinner audioUrl={audioUrl} />
-                <p className="text-sm font-bold tracking-wide uppercase">
-                  {currentPhase === 1 ? 'Phase 1: Metadata Extraction' : 'Phase 2: Sonic Deconstruction'}
-                </p>
-                <p className="text-[10px] font-mono text-text-secondary mt-1">PROCESSING AUDIO STREAM...</p>
-              </div>
-            )}
-
-            {/* Results Section */}
             <AnalysisResults phase1={phase1Result} phase2={phase2Result} sourceFileName={audioFile?.name ?? null} />
-
-            {/* Diagnostic Log */}
             <DiagnosticLog logs={logs} />
-            
           </main>
         </div>
       </div>

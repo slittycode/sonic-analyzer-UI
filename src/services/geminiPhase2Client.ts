@@ -1,6 +1,7 @@
 import { GoogleGenAI, Type, Type as SchemaType } from "@google/genai";
 import { appConfig, isGeminiPhase2Available } from "../config";
 import { DiagnosticLogEntry, Phase1Result, Phase2Result } from "../types";
+import { PHASE2_LABEL } from "./phaseLabels";
 
 interface AnalyzePhase2Args {
   file: File;
@@ -87,7 +88,9 @@ ABSOLUTE RULES:
    - chordStrength below 0.70 = chords approximate
    - pumpingConfidence below 0.40 = do not assert sidechain
    - segmentKey from segments shorter than 10s = low confidence
-7. You are a producer reading a spec sheet, not an audio analyser.
+7. When transcriptionDetail is present, use dominantPitches for note name recommendations, not melodyDetail.dominantNotes.
+8. stemSeparationUsed: true means bass and melodic content have been transcribed independently - treat bass stem notes and other stem notes as separate layers.
+9. You are a producer reading a spec sheet, not an audio analyser.
 
 FIELD GLOSSARY:
 - bpm: use exactly as Ableton project tempo
@@ -110,6 +113,16 @@ FIELD GLOSSARY:
 - structure.segments = arrangement blocks, plus or minus 5-10s
 - segmentLoudness = per-section LUFS, reveals drops and builds
 - dominantNotes = MIDI numbers, convert to note names
+- transcriptionDetail (when present):
+  - noteCount: total polyphonic notes detected
+  - averageConfidence: mean note confidence 0-1
+  - dominantPitches[]: top pitches with count
+  - pitchRange: min/max MIDI and note names
+  - stemSeparationUsed: true if Demucs was used
+  - stemsTranscribed: which stems were analysed
+  - notes[].stemSource: "bass"|"other"|"full_mix"
+  - When stemSeparationUsed is true, bass notes and melodic notes are separated by stemSource
+  - Prefer transcriptionDetail over melodyDetail for harmonic and melodic reconstruction advice when transcriptionDetail is present
 - pumpingStrength + pumpingConfidence both above 0.35 = sidechain
 - arrangementDetail.noveltyPeaks = structural event timestamps
 - segmentSpectral.stereoWidth changes = intentional width automation
@@ -386,13 +399,15 @@ ${JSON.stringify(phase1Result, null, 2)}`;
   const result = JSON.parse(phase2Response.text || "{}") as Phase2Result;
   const log: DiagnosticLogEntry = {
     model: modelName,
-    phase: "Phase 2: Reconstruction & Mix Critique",
+    phase: PHASE2_LABEL,
     promptLength: phase2Prompt.length,
     responseLength: phase2Response.text?.length || 0,
     durationMs: phase2EndTime - phase2StartTime,
     audioMetadata,
     timestamp: new Date().toISOString(),
     source: "gemini",
+    status: "success",
+    message: "Phase 2 advisory complete.",
   };
 
   return {

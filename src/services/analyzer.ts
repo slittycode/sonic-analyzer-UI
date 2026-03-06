@@ -1,6 +1,7 @@
 import { appConfig } from "../config";
 import { analyzePhase1WithBackend, mapBackendError } from "./backendPhase1Client";
 import { analyzePhase2WithGemini, canRunGeminiPhase2 } from "./geminiPhase2Client";
+import { PHASE1_LABEL, PHASE2_SKIPPED_LABEL } from "./phaseLabels";
 import { DiagnosticLogEntry, Phase1Result, Phase2Result } from "../types";
 
 export function isPhase2GeminiEnabled(): boolean {
@@ -31,7 +32,7 @@ export async function analyzeAudio(
 
     const phase1Log: DiagnosticLogEntry = {
       model: "local-dsp-engine",
-      phase: "Phase 1: DSP Backend Measurement",
+      phase: PHASE1_LABEL,
       promptLength: dspJson?.length ?? 0,
       responseLength: JSON.stringify(backendResult.phase1).length,
       durationMs: phase1End - phase1Start,
@@ -39,6 +40,10 @@ export async function analyzeAudio(
       timestamp: new Date().toISOString(),
       requestId: backendResult.requestId,
       source: "backend",
+      status: "success",
+      message: "Local DSP analysis complete.",
+      estimateLowMs: backendResult.diagnostics?.estimatedLowMs,
+      estimateHighMs: backendResult.diagnostics?.estimatedHighMs,
     };
 
     onPhase1Complete(backendResult.phase1, phase1Log);
@@ -47,7 +52,7 @@ export async function analyzeAudio(
     if (!canRunGeminiPhase2()) {
       const phase2SkippedLog: DiagnosticLogEntry = {
         model: "disabled",
-        phase: "Phase 2: Skipped (Gemini disabled or missing key)",
+        phase: PHASE2_SKIPPED_LABEL,
         promptLength: 0,
         responseLength: 0,
         durationMs: 0,
@@ -55,6 +60,8 @@ export async function analyzeAudio(
         timestamp: new Date().toISOString(),
         requestId: backendResult.requestId,
         source: "system",
+        status: "skipped",
+        message: "Phase 2 advisory is disabled or missing an API key.",
       };
       onPhase2Complete(null, phase2SkippedLog);
       return;

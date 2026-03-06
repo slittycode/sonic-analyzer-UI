@@ -121,7 +121,7 @@ test('missing melodyDetail shows MIDI unavailable state', async ({ page }) => {
   await page.getByRole('button', { name: /Initiate Analysis/i }).click();
 
   const panel = page.locator('section').filter({ hasText: /SESSION MUSICIAN/i }).first();
-  await expect(panel.getByText('MIDI TRANSCRIPTION UNAVAILABLE')).toBeVisible();
+  await expect(panel.locator('p').filter({ hasText: 'MIDI TRANSCRIPTION UNAVAILABLE' })).toBeVisible();
   await expect(
     panel.getByText('Re-run analysis with FLAC source for melody extraction, or paste DSP JSON with melodyDetail field populated'),
   ).toBeVisible();

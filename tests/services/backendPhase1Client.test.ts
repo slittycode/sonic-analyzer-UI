@@ -1,8 +1,11 @@
 import {
+  analyzePhase1WithBackend,
+  estimatePhase1WithBackend,
   parseBackendAnalyzeResponse,
   BackendClientError,
   mapBackendError,
 } from '../../src/services/backendPhase1Client';
+import { afterEach, vi } from 'vitest';
 
 const validPayload = {
   requestId: 'req_123',
@@ -14,9 +17,16 @@ const validPayload = {
     timeSignature: '4/4',
     durationSeconds: 184.2,
     lufsIntegrated: -8.4,
+    lufsRange: 3.1,
     truePeak: -0.5,
+    crestFactor: 8.6,
     stereoWidth: 0.75,
     stereoCorrelation: 0.82,
+    stereoDetail: {
+      stereoWidth: 0.75,
+      stereoCorrelation: 0.82,
+      subBassMono: true,
+    },
     spectralBalance: {
       subBass: -1.2,
       lowBass: 0.8,
@@ -24,6 +34,12 @@ const validPayload = {
       upperMids: 0.2,
       highs: 1.1,
       brilliance: 0.5,
+    },
+    spectralDetail: {
+      spectralCentroidMean: 1820.5,
+    },
+    rhythmDetail: {
+      grooveAmount: 0.42,
     },
     melodyDetail: {
       noteCount: 3,
@@ -42,12 +58,97 @@ const validPayload = {
       vibratoRate: 0.0,
       vibratoConfidence: 0.05,
     },
+    transcriptionDetail: {
+      transcriptionMethod: 'basic-pitch',
+      noteCount: 2,
+      averageConfidence: 0.83,
+      stemSeparationUsed: true,
+      stemsTranscribed: ['bass', 'other'],
+      dominantPitches: [
+        { pitchMidi: 48, pitchName: 'C3', count: 5 },
+        { pitchMidi: 55, pitchName: 'G3', count: 3 },
+      ],
+      pitchRange: {
+        minMidi: 48,
+        maxMidi: 67,
+        minName: 'C3',
+        maxName: 'G4',
+      },
+      notes: [
+        {
+          pitchMidi: 48,
+          pitchName: 'C3',
+          onsetSeconds: 0.1,
+          durationSeconds: 0.4,
+          confidence: 0.92,
+          stemSource: 'bass',
+        },
+        {
+          pitchMidi: 67,
+          pitchName: 'G4',
+          onsetSeconds: 0.5,
+          durationSeconds: 0.2,
+          confidence: 0.74,
+          stemSource: 'other',
+        },
+      ],
+    },
+    grooveDetail: {
+      grooveAmount: 0.42,
+    },
+    sidechainDetail: {
+      confidence: 0.31,
+    },
+    effectsDetail: {
+      reverbLikely: true,
+    },
+    synthesisCharacter: {
+      analogLike: true,
+    },
+    danceability: 1.24,
+    structure: {
+      sections: 5,
+    },
+    arrangementDetail: {
+      sectionCount: 5,
+    },
+    segmentLoudness: [{ start: 0, value: -8.2 }],
+    segmentSpectral: [{ start: 0, centroid: 1820.5 }],
+    segmentKey: [{ start: 0, key: 'A minor' }],
+    chordDetail: {
+      progression: ['Am', 'G'],
+    },
+    perceptual: {
+      energy: 0.77,
+    },
   },
   diagnostics: {
     backendDurationMs: 1420,
     engineVersion: '0.4.0',
   },
 };
+
+const validEstimatePayload = {
+  requestId: 'req_estimate_123',
+  estimate: {
+    durationSeconds: 214.6,
+    totalLowMs: 22000,
+    totalHighMs: 38000,
+    stages: [
+      {
+        key: 'local_dsp',
+        label: 'Local DSP analysis',
+        lowMs: 22000,
+        highMs: 38000,
+      },
+    ],
+  },
+};
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 describe('parseBackendAnalyzeResponse', () => {
   it('accepts a valid backend payload', () => {
@@ -58,6 +159,14 @@ describe('parseBackendAnalyzeResponse', () => {
     expect(parsed.diagnostics?.engineVersion).toBe('0.4.0');
     expect(parsed.phase1.melodyDetail?.noteCount).toBe(3);
     expect(parsed.phase1.melodyDetail?.notes[0].midi).toBe(60);
+    expect(parsed.phase1.transcriptionDetail?.noteCount).toBe(2);
+    expect(parsed.phase1.transcriptionDetail?.notes[0].stemSource).toBe('bass');
+    expect(parsed.phase1.lufsRange).toBe(3.1);
+    expect(parsed.phase1.crestFactor).toBe(8.6);
+    expect(parsed.phase1.stereoDetail).toEqual(validPayload.phase1.stereoDetail);
+    expect(parsed.phase1.structure).toEqual(validPayload.phase1.structure);
+    expect(parsed.phase1.segmentLoudness).toEqual(validPayload.phase1.segmentLoudness);
+    expect(parsed.phase1.perceptual).toEqual(validPayload.phase1.perceptual);
   });
 
   it('throws when phase1 is missing', () => {
@@ -138,7 +247,7 @@ describe('mapBackendError', () => {
 
     expect(mapped).toBeInstanceOf(BackendClientError);
     expect(mapped.code).toBe('NETWORK_UNREACHABLE');
-    expect(mapped.message).toMatch(/Cannot reach DSP backend/i);
+    expect(mapped.message).toMatch(/Cannot reach the local DSP backend/i);
   });
 
   it('preserves explicit backend client errors', () => {
@@ -150,5 +259,79 @@ describe('mapBackendError', () => {
 
     expect(mapped).toBe(original);
     expect(mapped.details?.status).toBe(502);
+  });
+});
+
+describe('estimatePhase1WithBackend', () => {
+  it('parses the backend preflight estimate contract', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify(validEstimatePayload), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }),
+      ),
+    );
+
+    const result = await estimatePhase1WithBackend(
+      new File(['wave'], 'track.mp3', { type: 'audio/mpeg' }),
+      { apiBaseUrl: 'http://localhost:8000' },
+    );
+
+    expect(result.requestId).toBe('req_estimate_123');
+    expect(result.estimate.totalLowMs).toBe(22000);
+    expect(result.estimate.stages[0].key).toBe('local_dsp');
+  });
+});
+
+describe('analyzePhase1WithBackend structured errors', () => {
+  it('maps structured timeout responses to backend timeout errors', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            requestId: 'req_timeout_001',
+            error: {
+              code: 'ANALYZER_TIMEOUT',
+              message: 'Local DSP analysis timed out before completion.',
+              phase: 'phase1_local_dsp',
+              retryable: true,
+            },
+            diagnostics: {
+              backendDurationMs: 42000,
+              timeoutSeconds: 53,
+              estimatedLowMs: 22000,
+              estimatedHighMs: 38000,
+            },
+          }),
+          {
+            status: 504,
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          },
+        ),
+      ),
+    );
+
+    await expect(
+      analyzePhase1WithBackend(
+        new File(['wave'], 'track.mp3', { type: 'audio/mpeg' }),
+        null,
+        { apiBaseUrl: 'http://localhost:8000' },
+      ),
+    ).rejects.toMatchObject({
+      code: 'BACKEND_TIMEOUT',
+      message: 'Local DSP analysis timed out before completion.',
+      details: {
+        status: 504,
+        serverCode: 'ANALYZER_TIMEOUT',
+        requestId: 'req_timeout_001',
+      },
+    });
   });
 });

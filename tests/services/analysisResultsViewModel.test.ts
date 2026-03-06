@@ -202,13 +202,50 @@ describe('analysisResultsViewModel helpers', () => {
   });
 
   it('builds melody insights from phase1 transcription payload', () => {
-    const insights = buildMelodyInsights(phase1);
+    const insights = buildMelodyInsights({
+      ...phase1,
+      transcriptionDetail: {
+        transcriptionMethod: 'basic-pitch',
+        noteCount: 6,
+        averageConfidence: 0.83,
+        stemSeparationUsed: true,
+        stemsTranscribed: ['bass', 'other'],
+        dominantPitches: [
+          { pitchMidi: 48, pitchName: 'C3', count: 4 },
+          { pitchMidi: 55, pitchName: 'G3', count: 3 },
+        ],
+        pitchRange: {
+          minMidi: 48,
+          maxMidi: 79,
+          minName: 'C3',
+          maxName: 'G5',
+        },
+        notes: [
+          {
+            pitchMidi: 48,
+            pitchName: 'C3',
+            onsetSeconds: 0.2,
+            durationSeconds: 0.3,
+            confidence: 0.81,
+            stemSource: 'bass',
+          },
+          {
+            pitchMidi: 79,
+            pitchName: 'G5',
+            onsetSeconds: 0.8,
+            durationSeconds: 0.2,
+            confidence: 0.85,
+            stemSource: 'other',
+          },
+        ],
+      },
+    });
 
     expect(insights).not.toBeNull();
-    expect(insights?.noteCount).toBe(4);
-    expect(insights?.rangeLabel).toBe('C4 - C5');
-    expect(insights?.dominantNotes).toEqual(['C4', 'E4', 'G4']);
-    expect(insights?.confidenceLabel).toBe('Moderate');
+    expect(insights?.noteCount).toBe(6);
+    expect(insights?.rangeLabel).toBe('C3 - G5');
+    expect(insights?.dominantNotes).toEqual(['C3', 'G3']);
+    expect(insights?.confidenceLabel).toBe('High');
     expect(insights?.isDraft).toBe(false);
   });
 });

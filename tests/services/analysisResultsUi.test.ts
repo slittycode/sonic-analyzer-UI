@@ -170,7 +170,73 @@ describe('AnalysisResults UI wiring', () => {
     );
 
     expect(html).toContain('MIDI TRANSCRIPTION UNAVAILABLE');
-    expect(html).toContain('Re-run analysis with FLAC source for melody extraction, or paste DSP JSON with melodyDetail field populated');
+    expect(html).toContain('Run with --transcribe flag for Basic Pitch polyphonic transcription, or ensure melodyDetail is present in DSP JSON');
+  });
+
+  it('prefers transcriptionDetail over melodyDetail in the Session Musician panel', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AnalysisResults, {
+        phase1: {
+          ...basePhase1,
+          melodyDetail: {
+            noteCount: 1,
+            notes: [{ midi: 72, onset: 0.1, duration: 0.2 }],
+            dominantNotes: [72],
+            pitchRange: { min: 72, max: 72 },
+            pitchConfidence: 0.2,
+            midiFile: null,
+            sourceSeparated: false,
+            vibratoPresent: false,
+            vibratoExtent: 0,
+            vibratoRate: 0,
+            vibratoConfidence: 0,
+          },
+          transcriptionDetail: {
+            transcriptionMethod: 'basic-pitch',
+            noteCount: 2,
+            averageConfidence: 0.83,
+            stemSeparationUsed: true,
+            stemsTranscribed: ['bass', 'other'],
+            dominantPitches: [
+              { pitchMidi: 48, pitchName: 'C3', count: 4 },
+              { pitchMidi: 55, pitchName: 'G3', count: 3 },
+            ],
+            pitchRange: {
+              minMidi: 48,
+              maxMidi: 67,
+              minName: 'C3',
+              maxName: 'G4',
+            },
+            notes: [
+              {
+                pitchMidi: 48,
+                pitchName: 'C3',
+                onsetSeconds: 0.1,
+                durationSeconds: 0.4,
+                confidence: 0.92,
+                stemSource: 'bass',
+              },
+              {
+                pitchMidi: 67,
+                pitchName: 'G4',
+                onsetSeconds: 0.5,
+                durationSeconds: 0.2,
+                confidence: 0.74,
+                stemSource: 'other',
+              },
+            ],
+          },
+        },
+        phase2: basePhase2,
+        sourceFileName: 'example.wav',
+      }),
+    );
+
+    expect(html).toContain('Polyphonic transcription via Basic Pitch');
+    expect(html).toContain('Range: C3 - G4');
+    expect(html).toContain('Confidence: 83%');
+    expect(html).toContain('Sources: bass, other');
+    expect(html).not.toContain('MIDI TRANSCRIPTION UNAVAILABLE');
   });
 
   it('renders arrangement novelty and spectral note labels with fixed segment palette colors', () => {

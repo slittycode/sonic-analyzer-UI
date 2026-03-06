@@ -127,23 +127,41 @@ interface SessionMusicianPanelProps {
 
 export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusicianPanelProps) {
   const melodyDetail = phase1.melodyDetail;
+  const transcriptionDetail = phase1.transcriptionDetail ?? null;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const previewRef = useRef<PreviewHandle | null>(null);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [expanded, setExpanded] = useState(true);
   const [quantizeOptions, setQuantizeOptions] = useState<QuantizeOptions>({ grid: 'off', swing: 0 });
+  const hasTranscription = !!transcriptionDetail?.noteCount && transcriptionDetail.noteCount > 0;
+  const hasMelody = !!melodyDetail?.notes?.length;
+  const activeSource = hasTranscription ? 'transcription' : hasMelody ? 'melody' : 'none';
 
   const mappedNotes = useMemo<MidiDisplayNote[]>(() => {
-    if (!melodyDetail?.notes?.length) return [];
-    return melodyDetail.notes.map((note) => ({
-      midi: note.midi,
-      name: midiToNoteName(note.midi),
-      startTime: note.onset,
-      duration: note.duration,
-      velocity: 90,
-      confidence: melodyDetail.pitchConfidence,
-    }));
-  }, [melodyDetail]);
+    if (activeSource === 'transcription' && transcriptionDetail?.notes?.length) {
+      return transcriptionDetail.notes.map((note) => ({
+        midi: note.pitchMidi,
+        name: note.pitchName,
+        startTime: note.onsetSeconds,
+        duration: note.durationSeconds,
+        velocity: 90,
+        confidence: note.confidence,
+      }));
+    }
+
+    if (activeSource === 'melody' && melodyDetail?.notes?.length) {
+      return melodyDetail.notes.map((note) => ({
+        midi: note.midi,
+        name: midiToNoteName(note.midi),
+        startTime: note.onset,
+        duration: note.duration,
+        velocity: 90,
+        confidence: melodyDetail.pitchConfidence,
+      }));
+    }
+
+    return [];
+  }, [activeSource, melodyDetail, transcriptionDetail]);
 
   const displayNotes = useMemo(
     () => quantizeNotes(mappedNotes, phase1.bpm || 120, quantizeOptions),
@@ -156,19 +174,19 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
   }, [displayNotes, phase1.durationSeconds]);
 
   useEffect(() => {
-    if (!canvasRef.current || !melodyDetail || !expanded) return;
+    if (!canvasRef.current || activeSource === 'none' || !expanded) return;
     drawPianoRoll(canvasRef.current, displayNotes, duration);
-  }, [melodyDetail, displayNotes, duration, expanded]);
+  }, [activeSource, displayNotes, duration, expanded]);
 
   useEffect(() => {
-    if (!canvasRef.current || !melodyDetail || !expanded) return;
+    if (!canvasRef.current || activeSource === 'none' || !expanded) return;
     const canvas = canvasRef.current;
     const observer = new ResizeObserver(() => {
       drawPianoRoll(canvas, displayNotes, duration);
     });
     observer.observe(canvas);
     return () => observer.disconnect();
-  }, [melodyDetail, displayNotes, duration, expanded]);
+  }, [activeSource, displayNotes, duration, expanded]);
 
   useEffect(() => () => previewRef.current?.stop(), []);
 
@@ -196,30 +214,53 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
   }, [displayNotes, phase1.bpm]);
 
   const stats = useMemo(() => {
-    if (!melodyDetail || !displayNotes.length) return null;
+    if (activeSource === 'none' || !displayNotes.length) return null;
     const midiValues = displayNotes.map((note) => note.midi);
     const minMidi = Math.min(...midiValues);
     const maxMidi = Math.max(...midiValues);
-    const avgConfidence =
-      Math.round((displayNotes.reduce((sum, note) => sum + note.confidence, 0) / displayNotes.length) * 100);
+    const avgConfidence = Math.round(
+      (activeSource === 'transcription'
+        ? transcriptionDetail?.averageConfidence ?? 0
+        : melodyDetail?.pitchConfidence ?? 0) * 100,
+    );
     const totalDuration = displayNotes.reduce((sum, note) => sum + note.duration, 0).toFixed(1);
 
     return {
-      count: displayNotes.length,
+      count: activeSource === 'transcription' ? transcriptionDetail?.noteCount ?? displayNotes.length : displayNotes.length,
       range: `${midiToNoteName(minMidi)} - ${midiToNoteName(maxMidi)}`,
       avgConfidence,
       totalDuration,
     };
-  }, [displayNotes, melodyDetail]);
-  const hasMelodyDetail = !!melodyDetail;
+  }, [activeSource, displayNotes, melodyDetail, transcriptionDetail]);
   const hasNotes = displayNotes.length > 0;
-  const dominantNoteNames = melodyDetail?.dominantNotes.map((note) => midiToNoteName(note)) ?? [];
+  const dominantNoteNames =
+    activeSource === 'transcription'
+      ? transcriptionDetail?.dominantPitches.map((note) => note.pitchName) ?? []
+      : melodyDetail?.dominantNotes.map((note) => midiToNoteName(note)) ?? [];
   const rangeLabel =
-    melodyDetail?.pitchRange.min === null || melodyDetail?.pitchRange.max === null || !melodyDetail?.pitchRange
-      ? 'n/a'
-      : `${midiToNoteName(melodyDetail.pitchRange.min)} - ${midiToNoteName(melodyDetail.pitchRange.max)}`;
-  const confidencePercent = hasMelodyDetail ? Math.round(melodyDetail.pitchConfidence * 100) : 0;
-  const isDraft = hasMelodyDetail ? melodyDetail.pitchConfidence < 0.15 : false;
+    activeSource === 'transcription'
+      ? transcriptionDetail?.pitchRange.minName && transcriptionDetail?.pitchRange.maxName
+        ? `${transcriptionDetail.pitchRange.minName} - ${transcriptionDetail.pitchRange.maxName}`
+        : 'n/a'
+      : melodyDetail?.pitchRange.min === null || melodyDetail?.pitchRange.max === null || !melodyDetail?.pitchRange
+        ? 'n/a'
+        : `${midiToNoteName(melodyDetail.pitchRange.min)} - ${midiToNoteName(melodyDetail.pitchRange.max)}`;
+  const confidencePercent =
+    activeSource === 'transcription'
+      ? Math.round((transcriptionDetail?.averageConfidence ?? 0) * 100)
+      : activeSource === 'melody'
+        ? Math.round((melodyDetail?.pitchConfidence ?? 0) * 100)
+        : 0;
+  const isDraft =
+    activeSource === 'transcription'
+      ? (transcriptionDetail?.averageConfidence ?? 0) < 0.15
+      : activeSource === 'melody'
+        ? (melodyDetail?.pitchConfidence ?? 0) < 0.15
+        : false;
+  const transcriptionSourceLabel =
+    activeSource === 'transcription' && transcriptionDetail?.stemsTranscribed.length
+      ? transcriptionDetail.stemsTranscribed.join(', ')
+      : null;
 
   return (
     <section className="space-y-4">
@@ -265,7 +306,7 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
               Download .mid
             </button>
             <span className="hidden md:inline-flex px-2 py-1 rounded border border-border text-[10px] font-mono text-text-secondary bg-bg-panel/40">
-              Poly mode coming soon
+              {activeSource === 'transcription' ? 'Polyphonic active' : activeSource === 'melody' ? 'Monophonic mode' : 'No MIDI data'}
             </span>
             <button
               onClick={() => setExpanded((prev) => !prev)}
@@ -280,18 +321,18 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
 
         {expanded && (
           <>
-            {!hasMelodyDetail && (
+            {activeSource === 'none' && (
               <div className="border border-border rounded-sm px-3 py-2 bg-bg-panel/40 space-y-1">
                 <p className="text-[11px] font-mono text-text-secondary uppercase tracking-wide">
                   MIDI TRANSCRIPTION UNAVAILABLE
                 </p>
                 <p className="text-[10px] font-mono text-text-secondary/80">
-                  Re-run analysis with FLAC source for melody extraction, or paste DSP JSON with melodyDetail field populated
+                  Run with --transcribe flag for Basic Pitch polyphonic transcription, or ensure melodyDetail is present in DSP JSON
                 </p>
               </div>
             )}
 
-            {hasMelodyDetail && (
+            {activeSource !== 'none' && (
               <>
                 {stats && (
                   <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono uppercase tracking-wide text-text-secondary">
@@ -302,17 +343,26 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
                     <span>Confidence: {stats.avgConfidence}%</span>
                     <span className="opacity-50">|</span>
                     <span>Duration: {stats.totalDuration}s</span>
+                    {transcriptionSourceLabel && (
+                      <>
+                        <span className="opacity-50">|</span>
+                        <span>Sources: {transcriptionSourceLabel}</span>
+                      </>
+                    )}
                   </div>
                 )}
 
                 <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono uppercase tracking-wide text-text-secondary">
                   {!stats && (
                     <span className="px-2 py-1 rounded border border-border bg-bg-panel/40">
-                      {melodyDetail.noteCount} notes
+                      {activeSource === 'transcription' ? transcriptionDetail?.noteCount ?? 0 : melodyDetail?.noteCount ?? 0} notes
                     </span>
                   )}
                   <span className="px-2 py-1 rounded border border-border bg-bg-panel/40">Range: {rangeLabel}</span>
                   <span className="px-2 py-1 rounded border border-border bg-bg-panel/40">Confidence: {confidencePercent}%</span>
+                  {transcriptionSourceLabel && (
+                    <span className="px-2 py-1 rounded border border-border bg-bg-panel/40">Sources: {transcriptionSourceLabel}</span>
+                  )}
                   {isDraft && (
                     <span className="px-2 py-1 rounded border border-yellow-500/30 text-yellow-400 bg-yellow-500/10">
                       Draft transcription
@@ -386,9 +436,11 @@ export function SessionMusicianPanel({ phase1, sourceFileName }: SessionMusician
             <div className="flex items-start gap-2 text-[10px] font-mono text-text-secondary/80">
               <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
               <span title="Session musician transcription details">
-                {hasMelodyDetail
-                  ? 'Monophonic transcription from backend pitch detection. Adjust quantize before preview/export.'
-                  : 'MIDI transcription unavailable until melodyDetail is present in the DSP payload.'}
+                {activeSource === 'transcription'
+                  ? 'Polyphonic transcription via Basic Pitch. Adjust quantize before preview/export.'
+                  : activeSource === 'melody'
+                    ? 'Monophonic transcription from backend pitch detection. Adjust quantize before preview/export.'
+                    : 'MIDI transcription unavailable until transcriptionDetail or melodyDetail is present in the DSP payload.'}
                 {isDraft ? ' Confidence is low, so treat this clip as a draft scaffold.' : ''}
               </span>
             </div>
