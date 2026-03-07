@@ -306,6 +306,7 @@ export default function App() {
               errorCode: backendError?.details?.serverCode ?? backendError?.code,
               estimateLowMs: isPhase1Failure ? activeEstimate?.totalLowMs : undefined,
               estimateHighMs: isPhase1Failure ? activeEstimate?.totalHighMs : undefined,
+              timings: isPhase1Failure ? backendError?.details?.diagnostics?.timings : undefined,
             },
           ]);
 

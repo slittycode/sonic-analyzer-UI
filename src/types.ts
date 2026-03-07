@@ -160,6 +160,16 @@ export interface Phase2Result {
   abletonRecommendations: AbletonRecommendation[];
 }
 
+export interface BackendTimingDiagnostics {
+  totalMs: number;
+  analysisMs: number;
+  serverOverheadMs: number;
+  flagsUsed: string[];
+  fileSizeBytes: number;
+  fileDurationSeconds: number | null;
+  msPerSecondOfAudio: number | null;
+}
+
 export interface BackendDiagnostics {
   backendDurationMs: number;
   engineVersion?: string;
@@ -168,6 +178,7 @@ export interface BackendDiagnostics {
   timeoutSeconds?: number;
   stdoutSnippet?: string;
   stderrSnippet?: string;
+  timings?: BackendTimingDiagnostics;
 }
 
 export interface BackendAnalyzeResponse {
@@ -229,4 +240,5 @@ export interface DiagnosticLogEntry {
   errorCode?: string;
   estimateLowMs?: number;
   estimateHighMs?: number;
+  timings?: BackendTimingDiagnostics;
 }

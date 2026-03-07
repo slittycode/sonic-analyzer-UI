@@ -31,6 +31,65 @@ describe('DiagnosticLog rendering', () => {
     expect(html).toContain('Local DSP analysis timed out before completion.');
   });
 
+  it('renders a timings summary row below the metadata grid', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(DiagnosticLog, {
+        logs: [
+          {
+            ...baseLog,
+            timings: {
+              totalMs: 1560,
+              analysisMs: 1420,
+              serverOverheadMs: 140,
+              flagsUsed: ['--transcribe', '--separate'],
+              fileSizeBytes: 543210,
+              fileDurationSeconds: 184.2,
+              msPerSecondOfAudio: 7.71,
+            },
+          },
+        ],
+      }),
+    );
+
+    expect(html).toContain('TIMINGS:');
+    expect(html).toContain('TOTAL: 1560ms');
+    expect(html).toContain('ANALYSIS: 1420ms');
+    expect(html).toContain('OVERHEAD: 140ms');
+    expect(html).toContain('FLAGS: --transcribe --separate');
+    expect(html).toContain('7.71 ms/s of audio');
+    expect(html.indexOf('TYPE:')).toBeLessThan(html.indexOf('TIMINGS:'));
+  });
+
+  it('renders fallback timing copy when flags and ms/s are unavailable', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(DiagnosticLog, {
+        logs: [
+          {
+            ...baseLog,
+            timings: {
+              totalMs: 820,
+              analysisMs: 800,
+              serverOverheadMs: 20,
+              flagsUsed: [],
+              fileSizeBytes: 543210,
+              fileDurationSeconds: null,
+              msPerSecondOfAudio: null,
+            },
+          },
+        ],
+      }),
+    );
+
+    expect(html).toContain('FLAGS: none');
+    expect(html).toContain('N/A ms/s of audio');
+  });
+
+  it('omits the timings row when backend timings are absent', () => {
+    const html = renderToStaticMarkup(React.createElement(DiagnosticLog, { logs: [baseLog] }));
+
+    expect(html).not.toContain('TIMINGS:');
+  });
+
   it('renders skipped entries without the running cursor', () => {
     const html = renderToStaticMarkup(
       React.createElement(DiagnosticLog, {

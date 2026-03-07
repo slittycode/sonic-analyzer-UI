@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { DiagnosticLogEntry, DiagnosticLogStatus } from '../types';
+import { BackendTimingDiagnostics, DiagnosticLogEntry, DiagnosticLogStatus } from '../types';
 
 interface DiagnosticLogProps {
   logs: DiagnosticLogEntry[];
@@ -26,6 +26,24 @@ function statusClass(status: DiagnosticLogStatus | undefined): string {
 function formatEstimateRange(lowMs?: number, highMs?: number): string | null {
   if (typeof lowMs !== 'number' || typeof highMs !== 'number') return null;
   return `${Math.round(lowMs / 1000)}s-${Math.round(highMs / 1000)}s`;
+}
+
+function formatTimingValue(value: number): string {
+  return value.toFixed(2).replace(/\.?0+$/, '');
+}
+
+function formatTimings(timings: BackendTimingDiagnostics): string {
+  const flagsLabel = timings.flagsUsed.length > 0 ? timings.flagsUsed.join(' ') : 'none';
+  const msPerSecondLabel =
+    timings.msPerSecondOfAudio === null ? 'N/A' : formatTimingValue(timings.msPerSecondOfAudio);
+
+  return [
+    `TOTAL: ${formatTimingValue(timings.totalMs)}ms`,
+    `ANALYSIS: ${formatTimingValue(timings.analysisMs)}ms`,
+    `OVERHEAD: ${formatTimingValue(timings.serverOverheadMs)}ms`,
+    `FLAGS: ${flagsLabel}`,
+    `${msPerSecondLabel} ms/s of audio`,
+  ].join(' | ');
 }
 
 export function DiagnosticLog({ logs }: DiagnosticLogProps) {
@@ -112,6 +130,12 @@ export function DiagnosticLog({ logs }: DiagnosticLogProps) {
                     </>
                   )}
                 </div>
+                {log.timings && (
+                  <div className="pl-2 text-text-secondary/70 whitespace-nowrap">
+                    <span className="opacity-50">TIMINGS:</span>{' '}
+                    <span className="text-text-primary">{formatTimings(log.timings)}</span>
+                  </div>
+                )}
               </div>
             );
           })}

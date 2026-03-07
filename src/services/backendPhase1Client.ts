@@ -1,6 +1,7 @@
 import {
   BackendAnalyzeResponse,
   BackendDiagnostics,
+  BackendTimingDiagnostics,
   BackendErrorResponse,
   BackendEstimateResponse,
   Phase1Result,
@@ -309,6 +310,34 @@ function parseOptionalBackendDiagnostics(value: unknown): BackendDiagnostics | u
     timeoutSeconds: expectOptionalNumber(diagnosticsRecord, "timeoutSeconds") ?? undefined,
     stdoutSnippet: expectOptionalString(diagnosticsRecord, "stdoutSnippet") ?? undefined,
     stderrSnippet: expectOptionalString(diagnosticsRecord, "stderrSnippet") ?? undefined,
+    timings: parseOptionalBackendTimings(diagnosticsRecord.timings),
+  };
+}
+
+function parseOptionalBackendTimings(value: unknown): BackendTimingDiagnostics | undefined {
+  if (value === undefined || value === null) return undefined;
+
+  const timingsRecord = expectRecord(value, "diagnostics.timings");
+  return {
+    totalMs: expectNumber(timingsRecord, "totalMs", "diagnostics.timings.totalMs"),
+    analysisMs: expectNumber(timingsRecord, "analysisMs", "diagnostics.timings.analysisMs"),
+    serverOverheadMs: expectNumber(
+      timingsRecord,
+      "serverOverheadMs",
+      "diagnostics.timings.serverOverheadMs",
+    ),
+    flagsUsed: expectStringArray(timingsRecord.flagsUsed, "diagnostics.timings.flagsUsed"),
+    fileSizeBytes: expectNumber(timingsRecord, "fileSizeBytes", "diagnostics.timings.fileSizeBytes"),
+    fileDurationSeconds: expectNullableNumber(
+      timingsRecord,
+      "fileDurationSeconds",
+      "diagnostics.timings.fileDurationSeconds",
+    ),
+    msPerSecondOfAudio: expectNullableNumber(
+      timingsRecord,
+      "msPerSecondOfAudio",
+      "diagnostics.timings.msPerSecondOfAudio",
+    ),
   };
 }
 
@@ -579,6 +608,15 @@ function expectArray(value: unknown, label: string): unknown[] {
   return value;
 }
 
+function expectStringArray(value: unknown, label: string): string[] {
+  return expectArray(value, label).map((entry, index) => {
+    if (typeof entry !== "string") {
+      throw new Error(`Expected ${label}[${index}] to be a string.`);
+    }
+    return entry;
+  });
+}
+
 function toNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
@@ -659,6 +697,15 @@ function expectOptionalNumber(record: UnknownRecord, key: string): number | null
   if (value === undefined || value === null) return null;
   if (typeof value !== "number" || Number.isNaN(value)) {
     throw new Error(`Expected ${key} to be a number when provided.`);
+  }
+  return value;
+}
+
+function expectNullableNumber(record: UnknownRecord, key: string, label = key): number | null {
+  const value = record[key];
+  if (value === null) return null;
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    throw new Error(`Expected ${label} to be a number or null.`);
   }
   return value;
 }

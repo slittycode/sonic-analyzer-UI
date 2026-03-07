@@ -51,6 +51,7 @@ export async function analyzeAudio(
       message: "Local DSP analysis complete.",
       estimateLowMs: backendResult.diagnostics?.estimatedLowMs,
       estimateHighMs: backendResult.diagnostics?.estimatedHighMs,
+      timings: backendResult.diagnostics?.timings,
     };
 
     onPhase1Complete(backendResult.phase1, phase1Log);

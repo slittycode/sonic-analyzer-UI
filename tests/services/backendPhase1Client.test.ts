@@ -125,6 +125,15 @@ const validPayload = {
   diagnostics: {
     backendDurationMs: 1420,
     engineVersion: '0.4.0',
+    timings: {
+      totalMs: 1560,
+      analysisMs: 1420,
+      serverOverheadMs: 140,
+      flagsUsed: ['--transcribe'],
+      fileSizeBytes: 543210,
+      fileDurationSeconds: 184.2,
+      msPerSecondOfAudio: 7.71,
+    },
   },
 };
 
@@ -157,6 +166,7 @@ describe('parseBackendAnalyzeResponse', () => {
     expect(parsed.requestId).toBe('req_123');
     expect(parsed.phase1.bpm).toBe(128);
     expect(parsed.diagnostics?.engineVersion).toBe('0.4.0');
+    expect(parsed.diagnostics?.timings).toEqual(validPayload.diagnostics.timings);
     expect(parsed.phase1.melodyDetail?.noteCount).toBe(3);
     expect(parsed.phase1.melodyDetail?.notes[0].midi).toBe(60);
     expect(parsed.phase1.transcriptionDetail?.noteCount).toBe(2);
@@ -190,6 +200,21 @@ describe('parseBackendAnalyzeResponse', () => {
         },
       }),
     ).toThrow(/spectralBalance/i);
+  });
+
+  it('throws when diagnostics.timings contains malformed values', () => {
+    expect(() =>
+      parseBackendAnalyzeResponse({
+        ...validPayload,
+        diagnostics: {
+          ...validPayload.diagnostics,
+          timings: {
+            ...validPayload.diagnostics.timings,
+            flagsUsed: ['--transcribe', 7],
+          },
+        },
+      }),
+    ).toThrow(/flagsUsed/i);
   });
 
   it('parses payloads that omit melodyDetail', () => {
@@ -330,6 +355,15 @@ describe('analyzePhase1WithBackend structured errors', () => {
               timeoutSeconds: 53,
               estimatedLowMs: 22000,
               estimatedHighMs: 38000,
+              timings: {
+                totalMs: 42120,
+                analysisMs: 42000,
+                serverOverheadMs: 120,
+                flagsUsed: ['--transcribe'],
+                fileSizeBytes: 654321,
+                fileDurationSeconds: null,
+                msPerSecondOfAudio: null,
+              },
             },
           }),
           {
@@ -355,6 +389,17 @@ describe('analyzePhase1WithBackend structured errors', () => {
         status: 504,
         serverCode: 'ANALYZER_TIMEOUT',
         requestId: 'req_timeout_001',
+        diagnostics: {
+          timings: {
+            totalMs: 42120,
+            analysisMs: 42000,
+            serverOverheadMs: 120,
+            flagsUsed: ['--transcribe'],
+            fileSizeBytes: 654321,
+            fileDurationSeconds: null,
+            msPerSecondOfAudio: null,
+          },
+        },
       },
     });
   });
